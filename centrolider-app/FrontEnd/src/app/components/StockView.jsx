@@ -1,6 +1,6 @@
 import {
   Package, AlertTriangle, TrendingDown, ShoppingCart,
-  Plus, Search, Pencil, Trash2, History, BarChart2,
+  Plus, Search, Pencil, Trash2, History, BarChart2, ArrowLeft,
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import {
@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { api } from "../../services/api";
 import { AddStockModal } from "./AddStockModal";
+import { VehicleDetailView } from "./VehicleDetailView";
 
 const CATEGORIAS = [
   { value: "pneus",    label: "Pneus" },
@@ -29,7 +30,10 @@ export function StockView() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [mainTab, setMainTab] = useState("inventario");   // "inventario" | "historico"
+  const [inventoryTab, setInventoryTab] = useState("todos");
   const [historyTab, setHistoryTab] = useState("pneus");
+  const [vehicleDetail, setVehicleDetail] = useState(null);   // vehicle object to drill into
+  const [vehicleDetailLoading, setVehicleDetailLoading] = useState(false);
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -66,12 +70,24 @@ export function StockView() {
 
   // ── Filtered inventory ─────────────────────────────────────────────
   const filteredItems = useMemo(() =>
-    stockItems.filter((item) =>
-      item.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (CAT_LABEL[item.categoria] || item.categoria).toLowerCase().includes(searchTerm.toLowerCase())
-    ),
-    [stockItems, searchTerm]
+    stockItems.filter((item) => {
+      const matchSearch =
+        item.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (CAT_LABEL[item.categoria] || item.categoria).toLowerCase().includes(searchTerm.toLowerCase());
+      const matchCat = inventoryTab === "todos" || item.categoria === inventoryTab;
+      return matchSearch && matchCat;
+    }),
+    [stockItems, searchTerm, inventoryTab]
   );
+
+  // ── Count per category for inventory tabs ──────────────────────────
+  const countByCategory = useMemo(() => {
+    const map = { todos: stockItems.length };
+    for (const cat of CATEGORIAS) {
+      map[cat.value] = stockItems.filter((i) => i.categoria === cat.value).length;
+    }
+    return map;
+  }, [stockItems]);
 
   // ── History: flatten all historico entries per category ────────────
   const historyByCategory = useMemo(() => {
@@ -112,6 +128,28 @@ export function StockView() {
     await api.deleteStockItem(item._id);
     setStockItems((prev) => prev.filter((i) => i._id !== item._id));
   };
+
+  const openVehicleDetail = async (vehicleId) => {
+    if (!vehicleId) return;
+    setVehicleDetailLoading(true);
+    try {
+      const v = await api.getVehicle(vehicleId);
+      setVehicleDetail(v);
+    } catch {
+      // vehicle not found — ignore
+    } finally {
+      setVehicleDetailLoading(false);
+    }
+  };
+
+  if (vehicleDetail) {
+    return (
+      <VehicleDetailView
+        vehicle={vehicleDetail}
+        onBack={() => setVehicleDetail(null)}
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -177,6 +215,34 @@ export function StockView() {
         {/* ── Inventário tab ─────────────────────────────────────────── */}
         {mainTab === "inventario" && (
           <div>
+            {/* Category sub-tabs */}
+            <div className="border-b border-gray-100 px-6 overflow-x-auto">
+              <div className="flex gap-1 py-2 min-w-max">
+                {[{ value: "todos", label: "Todos" }, ...CATEGORIAS].map((cat) => {
+                  const count = countByCategory[cat.value] || 0;
+                  const active = inventoryTab === cat.value;
+                  return (
+                    <button
+                      key={cat.value}
+                      onClick={() => setInventoryTab(cat.value)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                        active ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      {cat.label}
+                      {count > 0 && (
+                        <span className={`ml-1.5 px-1.5 py-0.5 text-xs rounded-full ${
+                          active ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-600"
+                        }`}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Search bar */}
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <span className="text-sm text-gray-500">{filteredItems.length} itens</span>
@@ -349,10 +415,17 @@ export function StockView() {
                       <tr key={i} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-3 text-sm font-medium text-gray-900">{h.itemNome}</td>
                         <td className="px-6 py-3">
-                          <div>
-                            <p className="text-sm font-semibold text-blue-600">{h.matricula || "—"}</p>
+                          <button
+                            type="button"
+                            onClick={() => openVehicleDetail(h.vehicleId)}
+                            disabled={!h.vehicleId || vehicleDetailLoading}
+                            className="text-left group disabled:cursor-default"
+                          >
+                            <p className="text-sm font-semibold text-blue-600 group-hover:underline group-hover:text-blue-800 transition-colors">
+                              {h.matricula || "—"}
+                            </p>
                             <p className="text-xs text-gray-500">{h.modelo || ""}</p>
-                          </div>
+                          </button>
                         </td>
                         <td className="px-6 py-3 text-center">
                           <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-700">

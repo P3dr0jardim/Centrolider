@@ -36,6 +36,7 @@ const sizesMatch = (a, b) => {
 
 export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehicle }) {
   const [tipo, setTipo] = useState("");
+  const [valor, setValor] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedItems, setSelectedItems] = useState([]);
   const [customItems, setCustomItems] = useState([]);
@@ -71,12 +72,36 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
     );
   }, [vehicle]);
 
+  // Auto-price: sum of (qty × unit price) for stock items that have a price
+  const stockTotal = useMemo(() => {
+    return selectedItems.reduce((sum, sel) => {
+      const full = stockItems.find((s) => s._id === sel._id);
+      return sum + (full?.preco ? full.preco * sel.quantidade : 0);
+    }, 0);
+  }, [selectedItems, stockItems]);
+
+  // Keep valor in sync with stock total whenever items change,
+  // but only if every selected item has a price (so we don't silently zero out)
+  useEffect(() => {
+    if (selectedItems.length === 0 && customItems.length === 0) {
+      setValor("");
+      return;
+    }
+    const allHavePrice = selectedItems.every((sel) => {
+      const full = stockItems.find((s) => s._id === sel._id);
+      return full?.preco != null && full.preco > 0;
+    });
+    if (allHavePrice && selectedItems.length > 0) {
+      setValor(stockTotal.toFixed(2));
+    }
+  }, [selectedItems, customItems, stockTotal, stockItems]);
+
   if (!isOpen) return null;
 
   const isMaintenance = MAINTENANCE_TYPES.includes(tipo);
 
   const handleClose = () => {
-    setTipo(""); setSearchTerm(""); setSelectedItems([]); setCustomItems([]);
+    setTipo(""); setValor(""); setSearchTerm(""); setSelectedItems([]); setCustomItems([]);
     setSaving(false); setError(null); setTyreMismatch(null);
     setShowCustomForm(false); setCustomNome(""); setCustomCategoria("outros"); setCustomQty(1);
     onClose();
@@ -88,7 +113,7 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
     const data = {
       vehicleId,
       tipo,
-      valor: fd.get("valor"),
+      valor,
       data: fd.get("data"),
       descricao: fd.get("descricao") || undefined,
       kms: fd.get("kms") || undefined,
@@ -195,9 +220,25 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Valor (€)</label>
-                <input type="number" name="valor" placeholder="Ex: 250.00" step="0.01" min="0" required
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Valor (€)</label>
+                  {stockTotal > 0 && (
+                    <span className="text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full font-medium">
+                      Auto: €{stockTotal.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  name="valor"
+                  placeholder="Ex: 250.00"
+                  step="0.01"
+                  min="0"
+                  required
+                  value={valor}
+                  onChange={(e) => setValor(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Data</label>
@@ -321,11 +362,21 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
                 )}
 
                 {/* Selected stock items */}
-                {selectedItems.map((item) => (
+                {selectedItems.map((item) => {
+                  const full = stockItems.find((s) => s._id === item._id);
+                  const lineTotal = full?.preco ? full.preco * item.quantidade : null;
+                  return (
                   <div key={item._id} className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{item.nome}</p>
-                      <p className="text-xs text-blue-600 capitalize">{item.categoria}</p>
+                      <p className="text-xs text-blue-600 capitalize">
+                        {item.categoria}
+                        {lineTotal != null && (
+                          <span className="ml-1 text-green-700 font-semibold">
+                            · €{full.preco.toFixed(2)}/un = €{lineTotal.toFixed(2)}
+                          </span>
+                        )}
+                      </p>
                     </div>
                     <div className="flex items-center gap-1">
                       <button type="button" onClick={() => updateStockQty(item._id, item.quantidade - 1)}
@@ -343,7 +394,8 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
 
                 {/* Custom (off-stock) items */}
                 <div>
