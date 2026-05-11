@@ -1,4 +1,5 @@
-const BASE = '/api';
+const BASE = import.meta.env.VITE_API_BASE ?? '/api';
+export const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_BASE ?? '/uploads';
 
 const getToken = () => localStorage.getItem('cl_token');
 
