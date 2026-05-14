@@ -1,5 +1,6 @@
 const Fleet = require('../models/Fleet');
 const Vehicle = require('../models/Vehicle');
+const { logActivity } = require('../utils/logActivity');
 
 exports.getAll = async (req, res) => {
   try {
@@ -34,6 +35,14 @@ exports.getOne = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const fleet = await Fleet.create(req.body);
+    logActivity({
+      user: req.user,
+      acao: 'Criou',
+      entidade: 'Frota',
+      descricao: `Criou a frota "${fleet.name}"`,
+      referencia: fleet.name,
+      referenciaId: fleet._id,
+    });
     res.status(201).json(fleet);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -44,6 +53,14 @@ exports.update = async (req, res) => {
   try {
     const fleet = await Fleet.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!fleet) return res.status(404).json({ message: 'Fleet not found' });
+    logActivity({
+      user: req.user,
+      acao: 'Editou',
+      entidade: 'Frota',
+      descricao: `Editou a frota "${fleet.name}"`,
+      referencia: fleet.name,
+      referenciaId: fleet._id,
+    });
     res.json(fleet);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -58,6 +75,13 @@ exports.remove = async (req, res) => {
     }
     const fleet = await Fleet.findByIdAndDelete(req.params.id);
     if (!fleet) return res.status(404).json({ message: 'Fleet not found' });
+    logActivity({
+      user: req.user,
+      acao: 'Eliminou',
+      entidade: 'Frota',
+      descricao: `Eliminou a frota "${fleet.name}"`,
+      referenciaId: fleet._id,
+    });
     res.json({ message: 'Fleet deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });

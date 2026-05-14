@@ -1,4 +1,5 @@
 const StockItem = require('../models/StockItem');
+const { logActivity } = require('../utils/logActivity');
 
 exports.getAll = async (req, res) => {
   try {
@@ -27,6 +28,14 @@ exports.getOne = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const item = await StockItem.create(req.body);
+    logActivity({
+      user: req.user,
+      acao: 'Adicionou',
+      entidade: 'Stock',
+      descricao: `Adicionou item de stock: ${item.nome} (${item.quantidade} un)`,
+      referencia: item.nome,
+      referenciaId: item._id,
+    });
     res.status(201).json(item);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -37,6 +46,14 @@ exports.update = async (req, res) => {
   try {
     const item = await StockItem.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!item) return res.status(404).json({ message: 'Stock item not found' });
+    logActivity({
+      user: req.user,
+      acao: 'Editou',
+      entidade: 'Stock',
+      descricao: `Editou item de stock: ${item.nome}`,
+      referencia: item.nome,
+      referenciaId: item._id,
+    });
     res.json(item);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -47,6 +64,13 @@ exports.remove = async (req, res) => {
   try {
     const item = await StockItem.findByIdAndDelete(req.params.id);
     if (!item) return res.status(404).json({ message: 'Stock item not found' });
+    logActivity({
+      user: req.user,
+      acao: 'Eliminou',
+      entidade: 'Stock',
+      descricao: `Eliminou item de stock: ${item.nome}`,
+      referenciaId: item._id,
+    });
     res.json({ message: 'Stock item deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -75,7 +99,6 @@ exports.consume = async (req, res) => {
 
     for (const item of items) {
       if (item.stockItemId) {
-        // Decrement existing stock item
         const doc = await StockItem.findById(item.stockItemId);
         if (doc) {
           doc.quantidade = Math.max(0, doc.quantidade - item.quantidade);
@@ -84,7 +107,6 @@ exports.consume = async (req, res) => {
           results.push(doc);
         }
       } else {
-        // Item not in stock — create a new entry with 0 quantity
         const doc = await StockItem.create({
           nome: item.nome,
           categoria: item.categoria || 'outros',
@@ -95,6 +117,16 @@ exports.consume = async (req, res) => {
         results.push(doc);
       }
     }
+
+    const nomes = items.map(i => i.nome).join(', ');
+    logActivity({
+      user: req.user,
+      acao: 'Consumiu',
+      entidade: 'Stock',
+      descricao: `Consumiu stock para viatura ${matricula || '—'}: ${nomes}`,
+      referencia: matricula,
+      referenciaId: vehicleId,
+    });
 
     res.json(results);
   } catch (err) {

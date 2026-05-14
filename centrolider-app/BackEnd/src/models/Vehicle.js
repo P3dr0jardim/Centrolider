@@ -6,7 +6,8 @@ const maintenanceRecordSchema = new mongoose.Schema({
   descricao: { type: String, required: true },
   oficina: { type: String },
   custo: { type: Number, default: 0 },
-  materiaisUsados: [{ type: String }],
+  materiaisUsados: [{ type: mongoose.Schema.Types.Mixed }],
+  custoAdicional: [{ descricao: { type: String }, valor: { type: Number } }],
 }, { _id: true });
 
 const vehicleSchema = new mongoose.Schema({
@@ -15,7 +16,8 @@ const vehicleSchema = new mongoose.Schema({
   modelo: { type: String, required: true },
   ano: { type: Number },
   condutor: { type: String },
-  km: { type: Number, default: 0 },
+  km:        { type: Number, default: 0 },
+  kmInicial: { type: Number, default: 0 },
   status: { type: String, enum: ['Operacional', 'Manutenção', 'Inativo'], default: 'Operacional' },
   proximaRevisao: { type: Date },
   seguro: { type: Date },
@@ -35,15 +37,19 @@ const vehicleSchema = new mongoose.Schema({
   pneuOriginal: { type: String },
   pneuAtual: { type: String },
   scheduleAutoStatus: { type: Boolean, default: false },
+  manutencaoDesde: { type: Date, default: null },
   historicoManutencao: [maintenanceRecordSchema],
   attachments: [{
-    originalName: { type: String },
-    filename: { type: String },
-    mimetype: { type: String },
-    size: { type: Number },
-    path: { type: String },
-    description: { type: String },
-    data: { type: Date },
+    originalName:  { type: String },
+    filename:      { type: String },
+    mimetype:      { type: String },
+    size:          { type: Number },
+    path:          { type: String },
+    fileData:      { type: Buffer, select: false }, // stored in DB, excluded from normal queries
+    description:   { type: String },
+    data:          { type: Date },
+    archived:      { type: Boolean, default: false },
+    manutencaoId:  { type: mongoose.Schema.Types.ObjectId, default: null },
   }],
   contactos: [{
     nome: { type: String },

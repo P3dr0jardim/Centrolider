@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const l = require\\('lucide-react'\\); console.log\\('CalendarClock:', !!l.CalendarClock, 'AlertTriangle:', !!l.AlertTriangle, 'Clock:', !!l.Clock\\)\")",
+      "Bash(node -e \"require\\('./src/controllers/notificationsController'\\); console.log\\('OK'\\)\")"
+    ]
+  }
+}

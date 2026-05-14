@@ -6,12 +6,16 @@ import { AgendaView } from "./components/AgendaView";
 import { RentabilidadeView } from "./components/RentabilidadeView";
 import { StockView } from "./components/StockView";
 import { ConfiguracoesView } from "./components/ConfiguracoesView";
+import { AtividadeView } from "./components/AtividadeView";
+import { ManutencaoView } from "./components/ManutencaoView";
+import { VehicleDetailView } from "./components/VehicleDetailView";
 import { Login } from "./components/Login";
 import { useAuth } from "./context/AuthContext";
 
 export default function App() {
   const { user, loading } = useAuth();
   const [activeMenu, setActiveMenu] = useState("frotas");
+  const [globalVehicle, setGlobalVehicle] = useState(null);
 
   if (loading) {
     return (
@@ -26,13 +30,24 @@ export default function App() {
   }
 
   const renderContent = () => {
+    if (globalVehicle) {
+      return (
+        <VehicleDetailView
+          vehicle={globalVehicle}
+          onBack={() => setGlobalVehicle(null)}
+          onVehicleUpdated={(v) => setGlobalVehicle(v)}
+        />
+      );
+    }
     switch (activeMenu) {
       case "frotas":        return <FrotasView />;
+      case "manutencao":    return <ManutencaoView />;
       case "frota-global":  return <FrotaGlobalView />;
       case "agenda":        return <AgendaView />;
       case "rentabilidade": return <RentabilidadeView />;
       case "stock":          return <StockView />;
       case "configuracoes":  return <ConfiguracoesView />;
+      case "atividade":      return <AtividadeView />;
       default:               return <FrotasView />;
     }
   };
@@ -41,8 +56,9 @@ export default function App() {
     <div className="min-h-screen bg-gray-50">
       <Navbar
         activeMenu={activeMenu}
-        onMenuChange={setActiveMenu}
-        onSettingsClick={() => setActiveMenu("configuracoes")}
+        onMenuChange={(menu) => { setGlobalVehicle(null); setActiveMenu(menu); }}
+        onSettingsClick={() => { setGlobalVehicle(null); setActiveMenu("configuracoes"); }}
+        onVehicleSelect={setGlobalVehicle}
       />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {renderContent()}

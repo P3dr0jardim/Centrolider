@@ -1,10 +1,11 @@
 const Vehicle = require('../models/Vehicle');
+const { logActivity } = require('../utils/logActivity');
 
 exports.getAll = async (req, res) => {
   try {
     const filter = {};
     if (req.query.frotaId) filter.frotaId = req.query.frotaId;
-    if (req.query.status) filter.status = req.query.status;
+    if (req.query.status)  filter.status  = req.query.status;
     const vehicles = await Vehicle.find(filter).populate('frotaId', 'name').sort({ matricula: 1 });
     res.json(vehicles);
   } catch (err) {
@@ -24,7 +25,17 @@ exports.getOne = async (req, res) => {
 
 exports.create = async (req, res) => {
   try {
-    const vehicle = await Vehicle.create(req.body);
+    const body = { ...req.body };
+    if (body.km != null) body.kmInicial = Number(body.km);
+    const vehicle = await Vehicle.create(body);
+    logActivity({
+      user: req.user,
+      acao: 'Adicionou',
+      entidade: 'Viatura',
+      descricao: `Adicionou a viatura ${vehicle.matricula} (${vehicle.modelo})`,
+      referencia: vehicle.matricula,
+      referenciaId: vehicle._id,
+    });
     res.status(201).json(vehicle);
   } catch (err) {
     if (err.code === 11000) return res.status(409).json({ message: 'Matricula already exists' });
@@ -35,12 +46,28 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const updateData = { ...req.body };
-    // If status is being manually changed, prevent the sync from auto-reverting it
+    // km and kmInicial are managed exclusively through maintenance records
+    delete updateData.km;
+    delete updateData.kmInicial;
     if (updateData.status !== undefined) {
       updateData.scheduleAutoStatus = false;
+      const current = await Vehicle.findById(req.params.id).select('status');
+      if (updateData.status === 'Manutenção' && current?.status !== 'Manutenção') {
+        updateData.manutencaoDesde = new Date();
+      } else if (updateData.status !== 'Manutenção') {
+        updateData.manutencaoDesde = null;
+      }
     }
     const vehicle = await Vehicle.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
     if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+    logActivity({
+      user: req.user,
+      acao: 'Editou',
+      entidade: 'Viatura',
+      descricao: `Editou a viatura ${vehicle.matricula} (${vehicle.modelo})`,
+      referencia: vehicle.matricula,
+      referenciaId: vehicle._id,
+    });
     res.json(vehicle);
   } catch (err) {
     if (err.code === 11000) return res.status(409).json({ message: 'Matricula already exists' });
@@ -52,40 +79,162 @@ exports.remove = async (req, res) => {
   try {
     const vehicle = await Vehicle.findByIdAndDelete(req.params.id);
     if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+    logActivity({
+      user: req.user,
+      acao: 'Eliminou',
+      entidade: 'Viatura',
+      descricao: `Eliminou a viatura ${vehicle.matricula} (${vehicle.modelo})`,
+      referencia: vehicle.matricula,
+      referenciaId: vehicle._id,
+    });
     res.json({ message: 'Vehicle deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
+function recomputeKm(vehicle) {
+  const readings = vehicle.historicoManutencao.map((r) => r.kms).filter((k) => k != null && k > 0);
+  vehicle.km = readings.length > 0 ? Math.max(vehicle.kmInicial || 0, ...readings) : (vehicle.kmInicial || 0);
+}
+
 exports.addMaintenanceRecord = async (req, res) => {
   try {
     const vehicle = await Vehicle.findById(req.params.id);
     if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
     vehicle.historicoManutencao.push(req.body);
+    recomputeKm(vehicle);
     await vehicle.save();
-    res.status(201).json(vehicle);
+    res.json(vehicle);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.updateMaintenanceRecord = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+    const record = vehicle.historicoManutencao.id(req.params.recordId);
+    if (!record) return res.status(404).json({ message: 'Maintenance record not found' });
+    Object.assign(record, req.body);
+    recomputeKm(vehicle);
+    await vehicle.save();
+    res.json(vehicle);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.deleteMaintenanceRecord = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+    vehicle.historicoManutencao.pull({ _id: req.params.recordId });
+    recomputeKm(vehicle);
+    await vehicle.save();
+    res.json(vehicle);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
 exports.addAttachment = async (req, res) => {
+  const fs = require('fs');
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+
+    // Read file into buffer and store in MongoDB — no filesystem dependency
+    const fileData = fs.readFileSync(req.file.path);
+
+    vehicle.attachments.push({
+      originalName: req.file.originalname,
+      filename:     req.file.filename,
+      mimetype:     req.file.mimetype,
+      size:         req.file.size,
+      fileData,
+      description:  req.body.description || '',
+      data:         req.body.data ? new Date(req.body.data) : new Date(),
+      manutencaoId: req.body.manutencaoId || undefined,
+    });
+    await vehicle.save();
+
+    // Remove temp file from disk after saving to DB
+    try { fs.unlinkSync(req.file.path); } catch (_) {}
+
+    res.json(vehicle);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.editAttachment = async (req, res) => {
   try {
     const vehicle = await Vehicle.findById(req.params.id);
     if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
-    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-    vehicle.attachments.push({
-      originalName: req.file.originalname,
-      filename: req.file.filename,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      path: `/uploads/${req.file.filename}`,
-      description: req.body.description || '',
-      data: req.body.data ? new Date(req.body.data) : new Date(),
-    });
+    const att = vehicle.attachments.id(req.params.attachmentId);
+    if (!att) return res.status(404).json({ message: 'Attachment not found' });
+    if (req.body.description !== undefined) att.description = req.body.description;
+    if (req.body.originalName !== undefined) att.originalName = req.body.originalName;
+    if (req.body.data !== undefined) att.data = new Date(req.body.data);
     await vehicle.save();
-    res.status(201).json(vehicle);
+    res.json(vehicle);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.toggleArchiveAttachment = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+    const att = vehicle.attachments.id(req.params.attachmentId);
+    if (!att) return res.status(404).json({ message: 'Attachment not found' });
+    att.archived = !att.archived;
+    await vehicle.save();
+    res.json(vehicle);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.downloadAttachment = async (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    // Include fileData (excluded by default via select:false)
+    const vehicle = await Vehicle.findById(req.params.id).select('+attachments.fileData');
+    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+
+    const att = vehicle.attachments.id(req.params.attachmentId);
+    if (!att) return res.status(404).json({ message: 'Attachment not found' });
+
+    // New uploads: serve from DB buffer
+    if (att.fileData && att.fileData.length > 0) {
+      res.set({
+        'Content-Type':        att.mimetype || 'application/octet-stream',
+        'Content-Disposition': `inline; filename="${encodeURIComponent(att.originalName || att.filename)}"`,
+        'Content-Length':      att.fileData.length,
+      });
+      return res.send(att.fileData);
+    }
+
+    // Legacy uploads: serve from disk
+    const diskPath = att.filename
+      ? path.join(__dirname, '../../../uploads', att.filename)
+      : null;
+
+    if (diskPath && fs.existsSync(diskPath)) {
+      res.set({
+        'Content-Type':        att.mimetype || 'application/octet-stream',
+        'Content-Disposition': `inline; filename="${encodeURIComponent(att.originalName || att.filename)}"`,
+      });
+      return res.sendFile(diskPath);
+    }
+
+    res.status(404).json({ message: 'File not found on disk. It may have been uploaded on a different server.' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

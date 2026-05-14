@@ -31,6 +31,11 @@ router.post('/', vehiclesController.create);
 router.put('/:id', vehiclesController.update);
 router.delete('/:id', vehiclesController.remove);
 router.post('/:id/maintenance', vehiclesController.addMaintenanceRecord);
+router.put('/:id/maintenance/:recordId', vehiclesController.updateMaintenanceRecord);
+router.delete('/:id/maintenance/:recordId', vehiclesController.deleteMaintenanceRecord);
 router.post('/:id/attachments', upload.single('file'), vehiclesController.addAttachment);
+router.put('/:id/attachments/:attachmentId/meta', vehiclesController.editAttachment);
+router.patch('/:id/attachments/:attachmentId/archive', vehiclesController.toggleArchiveAttachment);
+router.get('/:id/attachments/:attachmentId', vehiclesController.downloadAttachment);
 
 module.exports = router;

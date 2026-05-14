@@ -14,12 +14,28 @@ import {
   FileImage,
   File,
   Download,
+  Pencil,
+  Trash2,
+  Search,
+  Archive,
+  ArchiveRestore,
+  Check,
+  X as XIcon,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+
+function matLabel(m) {
+  if (!m) return "";
+  if (typeof m === "string") return m;
+  return m.quantidade && m.quantidade > 1 ? `${m.nome} x${m.quantidade}` : m.nome;
+}
 import { AddExpenseStockModal } from "./AddExpenseStockModal";
 import { AddRevenueModal } from "./AddRevenueModal";
 import { AddAttachmentModal } from "./AddAttachmentModal";
 import { EditVehicleModal } from "./EditVehicleModal";
+import { EditExpenseModal } from "./EditExpenseModal";
+import { EditMaintenanceModal } from "./EditMaintenanceModal";
+import { MaintenanceDetailModal } from "./MaintenanceDetailModal";
 import { api } from "../../services/api";
 
 const fmtDate = (d) => {
@@ -54,6 +70,15 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
   const [expenses, setExpenses] = useState([]);
   const [revenues, setRevenues] = useState([]);
   const [txLoading, setTxLoading] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [editingMaintenance, setEditingMaintenance] = useState(null);
+  const [viewingMaintenance, setViewingMaintenance] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
+  const [maintSearch, setMaintSearch] = useState("");
+  const [editingAttId, setEditingAttId] = useState(null);  // attachment being edited
+  const [editAttForm, setEditAttForm] = useState({});      // { originalName, description, data }
+  const [savingAtt, setSavingAtt] = useState(false);
+  const [showArchivedDocs, setShowArchivedDocs] = useState(false);
 
   useEffect(() => {
     setVehicleData(vehicle);
@@ -70,6 +95,38 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
       .catch(console.error)
       .finally(() => setTxLoading(false));
   }, [activeTab, vehicleData?._id]);
+
+  const handleDownloadAttachment = useCallback(async (att) => {
+    setDownloadingId(att._id);
+    try {
+      const base  = import.meta.env.VITE_API_BASE ?? '/api';
+      const token = localStorage.getItem('cl_token');
+      const res   = await fetch(`${base}/vehicles/${vehicleData._id}/attachments/${att._id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Erro ao descarregar ficheiro');
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.target   = '_blank';
+      a.rel      = 'noreferrer';
+      // Prefer inline view for PDFs/images; force download otherwise
+      const inline = blob.type.startsWith('image/') || blob.type === 'application/pdf';
+      if (!inline) a.download = att.originalName || att.filename || 'ficheiro';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setDownloadingId(null);
+    }
+  }, [vehicleData._id]);
 
   if (!vehicleData) return null;
 
@@ -91,6 +148,7 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
     });
     setExpenses((prev) => [expense, ...prev]);
 
+    let maintenanceRecordId = null;
     if (MAINTENANCE_TYPES.includes(data.tipo)) {
       const updated = await api.addMaintenance(vehicleData._id, {
         data: data.data,
@@ -98,10 +156,12 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
         custo: valor,
         kms: data.kms ? parseInt(data.kms) : undefined,
         oficina: data.oficina || undefined,
-        materiaisUsados: data.materiaisUsados?.map((i) => i.nome) || [],
+        materiaisUsados: data.materiaisUsados || [],
+        custoAdicional: data.custoAdicional || [],
       });
       setVehicleData(updated);
       if (onVehicleUpdated) onVehicleUpdated(updated);
+      maintenanceRecordId = updated.historicoManutencao[updated.historicoManutencao.length - 1]?._id;
     }
 
     if (data.materiaisUsados?.length > 0) {
@@ -119,6 +179,8 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
         })),
       }).catch(console.error);
     }
+
+    return { vehicleId: vehicleData._id, maintenanceRecordId };
   };
 
   const handleSaveRevenue = async (data) => {
@@ -132,8 +194,59 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
     setRevenues((prev) => [revenue, ...prev]);
   };
 
+  const handleUpdateExpense = async (id, data) => {
+    const updated = await api.updateExpense(id, data);
+    setExpenses((prev) => prev.map((e) => (e._id === id ? updated : e)));
+  };
+
+  const handleDeleteExpense = async (id) => {
+    if (!window.confirm("Eliminar esta despesa?")) return;
+    await api.deleteExpense(id);
+    setExpenses((prev) => prev.filter((e) => e._id !== id));
+  };
+
+  const handleUpdateMaintenance = async (recordId, data) => {
+    const updated = await api.updateMaintenance(vehicleData._id, recordId, data);
+    setVehicleData(updated);
+    if (onVehicleUpdated) onVehicleUpdated(updated);
+  };
+
+  const handleDeleteMaintenance = async (recordId) => {
+    if (!window.confirm("Eliminar este registo de manutenção?")) return;
+    const updated = await api.deleteMaintenance(vehicleData._id, recordId);
+    setVehicleData(updated);
+    if (onVehicleUpdated) onVehicleUpdated(updated);
+  };
+
   const handleSaveAttachment = async (formData) => {
     const updated = await api.addAttachment(vehicleData._id, formData);
+    setVehicleData(updated);
+    if (onVehicleUpdated) onVehicleUpdated(updated);
+  };
+
+  const openEditAtt = (att) => {
+    setEditingAttId(att._id);
+    setEditAttForm({
+      originalName: att.originalName || att.filename || "",
+      description: att.description || "",
+      data: att.data ? new Date(att.data).toISOString().slice(0, 10) : "",
+    });
+  };
+
+  const handleSaveAttMeta = async () => {
+    setSavingAtt(true);
+    try {
+      const updated = await api.updateAttachmentMeta(vehicleData._id, editingAttId, editAttForm);
+      setVehicleData(updated);
+      if (onVehicleUpdated) onVehicleUpdated(updated);
+      setEditingAttId(null);
+    } finally {
+      setSavingAtt(false);
+    }
+  };
+
+  const handleToggleArchive = async (att) => {
+    const updated = await api.toggleArchiveAttachment(vehicleData._id, att._id);
     setVehicleData(updated);
     if (onVehicleUpdated) onVehicleUpdated(updated);
   };
@@ -147,13 +260,26 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
     0
   );
 
-  const maintenance = [...(vehicleData.historicoManutencao || [])].sort(
+  const allMaintenance = [...(vehicleData.historicoManutencao || [])].sort(
     (a, b) => new Date(b.data) - new Date(a.data)
   );
 
-  const attachments = [...(vehicleData.attachments || [])].sort(
+  const maintenance = useMemo(() => {
+    if (!maintSearch.trim()) return allMaintenance;
+    const q = maintSearch.toLowerCase();
+    return allMaintenance.filter(
+      (r) =>
+        r.descricao?.toLowerCase().includes(q) ||
+        r.oficina?.toLowerCase().includes(q) ||
+        (r.materiaisUsados || []).some((m) => matLabel(m).toLowerCase().includes(q))
+    );
+  }, [allMaintenance, maintSearch]);
+
+  const allAttachments = [...(vehicleData.attachments || [])].sort(
     (a, b) => new Date(b.data || b.createdAt) - new Date(a.data || a.createdAt)
   );
+  const attachments        = allAttachments.filter((a) => !a.archived);
+  const archivedAttachments = allAttachments.filter((a) => a.archived);
 
   const statusColor =
     vehicleData.status === "Operacional"
@@ -166,7 +292,7 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
     { id: "visao-geral",          label: "Visão Geral" },
     { id: "historico-financeiro", label: "Histórico Financeiro" },
     { id: "manutencao-stock",     label: "Manutenção & Stock" },
-    { id: "documentos",           label: `Documentos${attachments.length > 0 ? ` (${attachments.length})` : ""}` },
+    { id: "documentos",           label: `Documentos${allAttachments.length > 0 ? ` (${attachments.length}${archivedAttachments.length > 0 ? `+${archivedAttachments.length}` : ""})` : ""}` },
   ];
 
   return (
@@ -362,6 +488,7 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Categoria</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Descrição</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Valor</th>
+                        <th className="px-4 py-3"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -371,7 +498,7 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                       ]
                         .sort((a, b) => new Date(b.data) - new Date(a.data))
                         .map((tx) => (
-                          <tr key={tx._id} className="hover:bg-gray-50">
+                          <tr key={tx._id} className="hover:bg-gray-50 group">
                             <td className="px-4 py-3 text-sm text-gray-700">{fmtDate(tx.data)}</td>
                             <td className="px-4 py-3">
                               <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
@@ -381,11 +508,34 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-700 capitalize">{tx.tipo}</td>
-                            <td className="px-4 py-3 text-sm text-gray-700">{tx.descricao || "—"}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700">
+                              <div>{tx.descricao || "—"}</div>
+                              {tx.kms && <div className="text-xs text-gray-400">{fmtNum(tx.kms)} km</div>}
+                            </td>
                             <td className={`px-4 py-3 text-sm text-right font-semibold ${
                               tx._kind === "Receita" ? "text-green-600" : "text-red-600"
                             }`}>
                               {tx._kind === "Receita" ? "+" : "-"}€{tx.valor.toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3">
+                              {tx._kind === "Despesa" && (
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+                                  <button
+                                    onClick={() => setEditingExpense(tx)}
+                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                    title="Editar"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteExpense(tx._id)}
+                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -399,9 +549,21 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
           {/* Tab 3 — Manutenção & Stock */}
           {activeTab === "manutencao-stock" && (
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Histórico de Manutenção ({maintenance.length} registos)
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Histórico de Manutenção ({maintenance.length}{maintSearch ? ` de ${allMaintenance.length}` : ""} registos)
+                </h3>
+                <div className="relative w-56">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Filtrar manutenções…"
+                    value={maintSearch}
+                    onChange={(e) => setMaintSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
               {maintenance.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">
                   <Wrench className="w-10 h-10 mx-auto mb-2 opacity-40" />
@@ -418,11 +580,12 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Oficina</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Materiais</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Custo</th>
+                        <th className="px-4 py-3"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {maintenance.map((rec, i) => (
-                        <tr key={rec._id || i} className="hover:bg-gray-50">
+                        <tr key={rec._id || i} className="hover:bg-gray-50 group">
                           <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                             <div className="flex items-center gap-2">
                               <Calendar className="w-4 h-4 text-gray-400" />
@@ -439,7 +602,7 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                               <div className="flex flex-wrap gap-1">
                                 {rec.materiaisUsados.map((m, j) => (
                                   <span key={j} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
-                                    <Package className="w-3 h-3" />{m}
+                                    <Package className="w-3 h-3" />{matLabel(m)}
                                   </span>
                                 ))}
                               </div>
@@ -449,6 +612,31 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                           </td>
                           <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">
                             {rec.custo > 0 ? `€${rec.custo.toFixed(2)}` : "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+                              <button
+                                onClick={() => setViewingMaintenance(rec)}
+                                className="px-2.5 py-1 text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg transition-colors whitespace-nowrap"
+                                title="Ver detalhes"
+                              >
+                                Ver detalhes
+                              </button>
+                              <button
+                                onClick={() => setEditingMaintenance(rec)}
+                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Editar"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMaintenance(rec._id)}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -461,8 +649,8 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
 
           {/* Tab 4 — Documentos */}
           {activeTab === "documentos" && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900">
                   Documentos Anexados ({attachments.length})
                 </h3>
@@ -474,45 +662,178 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                   Adicionar Documento
                 </button>
               </div>
-              {attachments.length === 0 ? (
+
+              {attachments.length === 0 && archivedAttachments.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">
                   <Paperclip className="w-10 h-10 mx-auto mb-2 opacity-40" />
                   <p>Sem documentos anexados.</p>
                   <p className="text-sm mt-1">Clique em "Adicionar Documento" para anexar um ficheiro.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-3">
-                  {attachments.map((att, i) => (
-                    <div key={att._id || i} className="flex items-center gap-4 p-4 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100 transition-colors">
-                      <div className="flex-shrink-0">
-                        <AttachmentIcon mimetype={att.mimetype} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{att.originalName || att.filename}</p>
-                        <div className="flex items-center gap-3 mt-0.5">
-                          {att.description && (
-                            <span className="text-xs text-gray-600">{att.description}</span>
-                          )}
-                          {att.description && att.data && <span className="text-gray-300 text-xs">·</span>}
-                          {att.data && (
-                            <span className="text-xs text-gray-500">{fmtDate(att.data)}</span>
-                          )}
-                          {att.size && (
-                            <span className="text-xs text-gray-400 ml-auto">{fmtSize(att.size)}</span>
-                          )}
+                <div className="space-y-2">
+                  {attachments.map((att) => (
+                    <div key={att._id} className="border border-gray-200 rounded-xl overflow-hidden">
+                      {/* Main row */}
+                      <div className="flex items-center gap-4 p-4 bg-gray-50 hover:bg-gray-100 transition-colors">
+                        <div className="flex-shrink-0">
+                          <AttachmentIcon mimetype={att.mimetype} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{att.originalName || att.filename}</p>
+                          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                            {att.manutencaoId && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+                                <Wrench className="w-3 h-3" />
+                                Manutenção
+                              </span>
+                            )}
+                            {att.description && <span className="text-xs text-gray-600">{att.description}</span>}
+                            {att.description && att.data && <span className="text-gray-300 text-xs">·</span>}
+                            {att.data && <span className="text-xs text-gray-500">{fmtDate(att.data)}</span>}
+                            {att.size && <span className="text-xs text-gray-400 ml-auto">{fmtSize(att.size)}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => editingAttId === att._id ? setEditingAttId(null) : openEditAtt(att)}
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Editar"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleArchive(att)}
+                            className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                            title="Arquivar"
+                          >
+                            <Archive className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadAttachment(att)}
+                            disabled={downloadingId === att._id}
+                            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40"
+                            title="Abrir ficheiro"
+                          >
+                            {downloadingId === att._id
+                              ? <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                              : <Download className="w-4 h-4" />}
+                          </button>
                         </div>
                       </div>
-                      <a
-                        href={att.path}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex-shrink-0 p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Abrir ficheiro"
-                      >
-                        <Download className="w-4 h-4" />
-                      </a>
+
+                      {/* Inline edit form */}
+                      {editingAttId === att._id && (
+                        <div className="px-4 pb-4 pt-3 bg-blue-50 border-t border-blue-100 space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Nome do ficheiro</label>
+                              <input
+                                type="text"
+                                value={editAttForm.originalName}
+                                onChange={(e) => setEditAttForm((f) => ({ ...f, originalName: e.target.value }))}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Data</label>
+                              <input
+                                type="date"
+                                value={editAttForm.data}
+                                onChange={(e) => setEditAttForm((f) => ({ ...f, data: e.target.value }))}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Descrição</label>
+                            <input
+                              type="text"
+                              value={editAttForm.description}
+                              onChange={(e) => setEditAttForm((f) => ({ ...f, description: e.target.value }))}
+                              placeholder="Ex: Contrato de leasing, seguro, etc."
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditingAttId(null)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+                            >
+                              <XIcon className="w-4 h-4" />
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSaveAttMeta}
+                              disabled={savingAtt}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
+                            >
+                              <Check className="w-4 h-4" />
+                              {savingAtt ? "A guardar…" : "Guardar"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Archived section */}
+              {archivedAttachments.length > 0 && (
+                <div className="border border-dashed border-gray-300 rounded-xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowArchivedDocs((v) => !v)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Archive className="w-4 h-4" />
+                      <span className="font-medium">Arquivados ({archivedAttachments.length})</span>
+                    </div>
+                    <span className="text-xs text-gray-400">{showArchivedDocs ? "Ocultar" : "Ver"}</span>
+                  </button>
+
+                  {showArchivedDocs && (
+                    <div className="divide-y divide-gray-100">
+                      {archivedAttachments.map((att) => (
+                        <div key={att._id} className="flex items-center gap-4 p-4 bg-gray-50 opacity-70">
+                          <div className="flex-shrink-0">
+                            <AttachmentIcon mimetype={att.mimetype} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-700 truncate line-through">{att.originalName || att.filename}</p>
+                            {att.description && <p className="text-xs text-gray-400 mt-0.5">{att.description}</p>}
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleArchive(att)}
+                              className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Restaurar"
+                            >
+                              <ArchiveRestore className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadAttachment(att)}
+                              disabled={downloadingId === att._id}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40"
+                              title="Abrir ficheiro"
+                            >
+                              {downloadingId === att._id
+                                ? <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                : <Download className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -544,6 +865,25 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
         onClose={() => setIsAttachmentModalOpen(false)}
         onSave={handleSaveAttachment}
         vehicleId={vehicleData._id}
+      />
+      <EditExpenseModal
+        isOpen={!!editingExpense}
+        onClose={() => setEditingExpense(null)}
+        onSave={handleUpdateExpense}
+        expense={editingExpense}
+      />
+      <EditMaintenanceModal
+        isOpen={!!editingMaintenance}
+        onClose={() => setEditingMaintenance(null)}
+        onSave={handleUpdateMaintenance}
+        record={editingMaintenance}
+      />
+      <MaintenanceDetailModal
+        isOpen={!!viewingMaintenance}
+        onClose={() => setViewingMaintenance(null)}
+        record={viewingMaintenance}
+        vehicle={vehicleData}
+        attachments={allAttachments}
       />
     </div>
   );

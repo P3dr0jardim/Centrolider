@@ -27,9 +27,11 @@ export function EditVehicleModal({ isOpen, onClose, onSave, vehicle }) {
     for (const [k, v] of fd.entries()) {
       if (v !== "") data[k] = v;
     }
-    for (const field of ["km", "intervaloRevisao", "kmsUltimaRevisao", "rentabilidade"]) {
+    for (const field of ["intervaloRevisao", "kmsUltimaRevisao", "rentabilidade"]) {
       if (data[field] != null) data[field] = Number(data[field]);
     }
+    // km is managed exclusively through maintenance records
+    delete data.km;
     setSaving(true);
     setError(null);
     try {
@@ -87,7 +89,13 @@ export function EditVehicleModal({ isOpen, onClose, onSave, vehicle }) {
               </div>
 
               {field("Condutor", "condutor")}
-              {field("KM Atual", "km", "number", { min: 0 })}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">KM Atual</label>
+                <div className="w-full px-4 py-2.5 border border-gray-100 bg-gray-50 rounded-lg text-gray-500 text-sm">
+                  {vehicle.km != null ? `${Number(vehicle.km).toLocaleString("pt-PT")} km` : "—"}
+                  <span className="ml-2 text-xs text-gray-400">(actualizado por manutenções)</span>
+                </div>
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Combustível</label>

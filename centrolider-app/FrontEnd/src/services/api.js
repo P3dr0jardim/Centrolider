@@ -51,6 +51,8 @@ export const api = {
   updateVehicle: (id, data) => request('PUT', `/vehicles/${id}`, data),
   deleteVehicle: (id) => request('DELETE', `/vehicles/${id}`),
   addMaintenance: (id, data) => request('POST', `/vehicles/${id}/maintenance`, data),
+  updateMaintenance: (id, recordId, data) => request('PUT', `/vehicles/${id}/maintenance/${recordId}`, data),
+  deleteMaintenance: (id, recordId) => request('DELETE', `/vehicles/${id}/maintenance/${recordId}`),
 
   // Expenses
   getExpenses: (params) => request('GET', `/expenses${qs(params)}`),
@@ -94,9 +96,20 @@ export const api = {
     });
   },
 
+  updateAttachmentMeta: (vehicleId, attachmentId, data) =>
+    request('PUT', `/vehicles/${vehicleId}/attachments/${attachmentId}/meta`, data),
+  toggleArchiveAttachment: (vehicleId, attachmentId) =>
+    request('PATCH', `/vehicles/${vehicleId}/attachments/${attachmentId}/archive`),
+
   // Schedules
   getSchedules: (params) => request('GET', `/schedules${qs(params)}`),
   createSchedule: (data) => request('POST', '/schedules', data),
   updateSchedule: (id, data) => request('PUT', `/schedules/${id}`, data),
   deleteSchedule: (id) => request('DELETE', `/schedules/${id}`),
+
+  // Activity logs
+  getLogs: (params) => request('GET', `/logs${qs(params)}`),
+
+  // Notifications
+  getNotifications: () => request('GET', '/notifications'),
 };

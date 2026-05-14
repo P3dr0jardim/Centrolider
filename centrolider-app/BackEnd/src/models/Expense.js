@@ -10,6 +10,7 @@ const expenseSchema = new mongoose.Schema({
   valor: { type: Number, required: true, min: 0 },
   data: { type: Date, required: true },
   descricao: { type: String, trim: true },
+  kms:       { type: Number, min: 0 },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Expense', expenseSchema);

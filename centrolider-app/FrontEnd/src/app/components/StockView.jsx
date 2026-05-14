@@ -449,6 +449,7 @@ export function StockView() {
         onClose={() => setModalOpen(false)}
         onSave={handleSave}
         item={editItem}
+        existingItems={stockItems}
       />
     </div>
   );

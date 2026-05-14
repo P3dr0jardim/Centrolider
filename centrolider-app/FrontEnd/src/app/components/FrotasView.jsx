@@ -1,8 +1,9 @@
 import { Car, AlertCircle, CheckCircle, Clock, TrendingUp } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { StatCard } from "./StatCard";
 import { FleetCard } from "./FleetCard";
 import { FleetDetailView } from "./FleetDetailView";
+import { AddFleetModal } from "./AddFleetModal";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { api } from "../../services/api";
 
@@ -17,13 +18,29 @@ export function FrotasView() {
   const [fleets, setFleets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isAddFleetOpen, setIsAddFleetOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     api.getFleets()
       .then(setFleets)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+    api.getNotifications()
+      .then(({ notifications }) => setNotifications(notifications || []))
+      .catch(() => {});
   }, []);
+
+  const fleetNotifCounts = useMemo(() => {
+    const map = {};
+    for (const n of notifications) {
+      if (n.frotaId) {
+        const fid = String(n.frotaId);
+        map[fid] = (map[fid] || 0) + 1;
+      }
+    }
+    return map;
+  }, [notifications]);
 
   if (selectedFleet) {
     return (
@@ -91,7 +108,9 @@ export function FrotasView() {
       <div>
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-xl font-semibold text-gray-900">Gestão de Frotas</h3>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+          <button
+            onClick={() => setIsAddFleetOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
             + Nova Frota
           </button>
         </div>
@@ -120,6 +139,7 @@ export function FrotasView() {
                   maintenanceAlerts={fleet.maintenanceAlerts || 0}
                   performanceChange={fleet.totalVehicles > 0 ? `${fleet.activeVehicles} operacionais` : "Sem veículos"}
                   imageUrl={fleet.imageUrl}
+                  notifCount={fleetNotifCounts[String(fleet._id)] || 0}
                 />
               </div>
             ))}
@@ -214,6 +234,14 @@ export function FrotasView() {
           </div>
         </div>
       </div>
+      <AddFleetModal
+        isOpen={isAddFleetOpen}
+        onClose={() => setIsAddFleetOpen(false)}
+        onSave={async (data) => {
+          const fleet = await api.createFleet(data);
+          setFleets((prev) => [...prev, { ...fleet, totalVehicles: 0, activeVehicles: 0, maintenanceAlerts: 0 }]);
+        }}
+      />
     </div>
   );
 }

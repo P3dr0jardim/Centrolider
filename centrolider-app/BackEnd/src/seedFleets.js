@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Fleet = require('./models/Fleet');
 
 const fleets = [
+  { name: 'Teste', description: 'Frota de testes' },
   { name: 'ARM',     description: 'Água e Resíduos da Madeira' },
   { name: 'CMC',     description: 'Câmara Municipal da Calheta' },
   { name: 'CMF',     description: 'Câmara Municipal do Funchal' },

@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Euro, Car, Wrench } from "lucide-react";
+import { TrendingUp, Euro, Car, Wrench, Search, X, SlidersHorizontal } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import {
   PieChart, Pie, Cell,
@@ -6,11 +6,12 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { api } from "../../services/api";
+import { VehicleDetailView } from "./VehicleDetailView";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#6b7280", "#06b6d4", "#ec4899"];
 
 const fmtEuro = (v) => `€${Number(v).toLocaleString("pt-PT")}`;
-const fmtNum = (n) => (n != null ? Number(n).toLocaleString("pt-PT") : "—");
+const fmtNum  = (n) => (n != null ? Number(n).toLocaleString("pt-PT") : "—");
 
 function extractBrand(modelo) {
   if (!modelo) return "Outro";
@@ -19,11 +20,34 @@ function extractBrand(modelo) {
   return cap;
 }
 
+// ── Tyre helpers ──────────────────────────────────────────────────────────────
+const TYRE_RE = /(\d{3}\/\d{2}\s*[Rr]\s*\d{2})/;
+
+function extractTyreSize(text) {
+  if (!text) return null;
+  const m = text.match(TYRE_RE);
+  return m ? m[1].replace(/\s+/g, "").toUpperCase() : null;
+}
+
+function getVehicleTyreSize(v) {
+  return (
+    extractTyreSize(v.pneuAtual) ||
+    extractTyreSize(v.pneuOriginal) ||
+    extractTyreSize(v.tipoPneu) ||
+    null
+  );
+}
+
 export function FrotaGlobalView() {
   const [fleets, setFleets] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [search, setSearch]             = useState("");
+  const [statusFilter, setStatusFilter] = useState("todas");
+  const [modelFilter, setModelFilter]   = useState("");
+  const [tyreFilter, setTyreFilter]     = useState("");
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
 
   useEffect(() => {
     Promise.all([api.getFleets(), api.getVehicles()])
@@ -43,12 +67,41 @@ export function FrotaGlobalView() {
     return map;
   }, [vehicles]);
 
-  // Fleet list enriched with their vehicles
+  const searchTerm = search.trim().toLowerCase();
+
+  // Unique models (sorted) for the dropdown
+  const uniqueModels = useMemo(() => {
+    const set = new Set(vehicles.map((v) => v.modelo).filter(Boolean));
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [vehicles]);
+
+  // Unique tyre sizes (sorted) extracted from vehicle tyre fields
+  const uniqueTyreSizes = useMemo(() => {
+    const set = new Set(vehicles.map(getVehicleTyreSize).filter(Boolean));
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [vehicles]);
+
+  const hasActiveFilters = searchTerm || statusFilter !== "todas" || modelFilter || tyreFilter;
+
+  // Fleet list enriched with their vehicles, filtered by search + status + model + tyre
   const fleetsWithVehicles = useMemo(() =>
     fleets
-      .map((f) => ({ ...f, veiculos: vehiclesByFleet[f._id] || [] }))
+      .map((f) => {
+        const all = vehiclesByFleet[f._id] || [];
+        const veiculos = all.filter((v) => {
+          const matchSearch = !searchTerm ||
+            v.matricula?.toLowerCase().includes(searchTerm) ||
+            v.modelo?.toLowerCase().includes(searchTerm) ||
+            v.condutor?.toLowerCase().includes(searchTerm);
+          const matchStatus = statusFilter === "todas" || v.status === statusFilter;
+          const matchModel  = !modelFilter || v.modelo === modelFilter;
+          const matchTyre   = !tyreFilter  || getVehicleTyreSize(v) === tyreFilter;
+          return matchSearch && matchStatus && matchModel && matchTyre;
+        });
+        return { ...f, veiculos, totalVeiculos: all.length };
+      })
       .filter((f) => f.veiculos.length > 0),
-    [fleets, vehiclesByFleet]
+    [fleets, vehiclesByFleet, searchTerm, statusFilter, modelFilter, tyreFilter]
   );
 
   // Global stats
@@ -82,6 +135,19 @@ export function FrotaGlobalView() {
     [fleetsWithVehicles]
   );
 
+  if (selectedVehicle) {
+    return (
+      <VehicleDetailView
+        vehicle={selectedVehicle}
+        onBack={() => setSelectedVehicle(null)}
+        onVehicleUpdated={(updated) => {
+          setVehicles((prev) => prev.map((v) => (v._id === updated._id ? updated : v)));
+          setSelectedVehicle(updated);
+        }}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
@@ -108,11 +174,124 @@ export function FrotaGlobalView() {
 
       {/* Listagens por Frota */}
       <div className="space-y-6">
-        <h3 className="text-xl font-semibold text-gray-900">Listagens de Frotas por Empresa</h3>
+        {/* Row 1: status filters + text search */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-xl font-semibold text-gray-900 mr-2">Listagens de Frotas por Empresa</h3>
+            {[
+              { key: "todas",       label: "Todas",        count: vehicles.length, color: "bg-gray-600" },
+              { key: "Operacional", label: "Operacionais", count: operacionais,    color: "bg-green-600" },
+              { key: "Manutenção",  label: "Manutenção",   count: emManutencao,    color: "bg-orange-500" },
+            ].map(({ key, label, count, color }) => (
+              <button
+                key={key}
+                onClick={() => setStatusFilter(key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+                  statusFilter === key
+                    ? `${color} text-white border-transparent`
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {label}
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                  statusFilter === key ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"
+                }`}>
+                  {count}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="relative w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Pesquisar matrícula, modelo, condutor…"
+              className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Row 2: model + tyre size dropdowns */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm text-gray-500">
+            <SlidersHorizontal className="w-4 h-4" />
+            <span className="font-medium">Filtrar por:</span>
+          </div>
+
+          {/* Model dropdown */}
+          <div className="relative">
+            <select
+              value={modelFilter}
+              onChange={(e) => setModelFilter(e.target.value)}
+              className={`pl-3 pr-8 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white cursor-pointer transition-colors ${
+                modelFilter ? "border-blue-400 text-blue-700 bg-blue-50 font-medium" : "border-gray-200 text-gray-700"
+              }`}
+            >
+              <option value="">Todos os modelos</option>
+              {uniqueModels.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Tyre size dropdown */}
+          <div className="relative">
+            <select
+              value={tyreFilter}
+              onChange={(e) => setTyreFilter(e.target.value)}
+              className={`pl-3 pr-8 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white cursor-pointer transition-colors ${
+                tyreFilter ? "border-blue-400 text-blue-700 bg-blue-50 font-medium" : "border-gray-200 text-gray-700"
+              }`}
+            >
+              <option value="">Todas as dimensões de pneu</option>
+              {uniqueTyreSizes.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Clear all filters */}
+          {hasActiveFilters && (
+            <button
+              onClick={() => { setSearch(""); setStatusFilter("todas"); setModelFilter(""); setTyreFilter(""); }}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors font-medium"
+            >
+              <X className="w-3.5 h-3.5" />
+              Limpar filtros
+            </button>
+          )}
+
+          {/* Active filter count badge */}
+          {hasActiveFilters && (
+            <span className="text-xs text-gray-500">
+              {fleetsWithVehicles.reduce((s, f) => s + f.veiculos.length, 0)} viatura{fleetsWithVehicles.reduce((s, f) => s + f.veiculos.length, 0) !== 1 ? "s" : ""} encontrada{fleetsWithVehicles.reduce((s, f) => s + f.veiculos.length, 0) !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
 
         {fleetsWithVehicles.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 px-6 py-12 text-center text-gray-400">
-            Nenhuma frota com veículos encontrada.
+            {hasActiveFilters ? "Nenhuma viatura encontrada com os filtros aplicados." : "Nenhuma frota com veículos encontrada."}
           </div>
         ) : (
           fleetsWithVehicles.map((fleet) => (
@@ -124,7 +303,9 @@ export function FrotaGlobalView() {
                 </div>
                 <div className="flex items-center gap-4">
                   <span className="px-4 py-2 bg-blue-100 text-blue-700 font-semibold rounded-full text-sm">
-                    {fleet.veiculos.length} Viaturas
+                    {hasActiveFilters
+                      ? `${fleet.veiculos.length} / ${fleet.totalVeiculos} Viaturas`
+                      : `${fleet.veiculos.length} Viaturas`}
                   </span>
                   <span className="text-sm text-gray-600">
                     {fleet.veiculos.filter((v) => v.status === "Operacional").length} operacionais
@@ -139,6 +320,7 @@ export function FrotaGlobalView() {
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Matrícula</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Modelo</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Condutor</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Pneu</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Estado</th>
                       <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">KM</th>
                       <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Rentabilidade/mês</th>
@@ -148,10 +330,27 @@ export function FrotaGlobalView() {
                     {fleet.veiculos.map((v) => (
                       <tr key={v._id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-3 whitespace-nowrap">
-                          <span className="text-sm font-semibold text-blue-600">{v.matricula}</span>
+                          <button
+                            onClick={() => setSelectedVehicle(v)}
+                            className="text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                          >
+                            {v.matricula}
+                          </button>
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-700">{v.modelo}</td>
                         <td className="px-6 py-3 text-sm text-gray-700">{v.condutor || "—"}</td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {(() => {
+                            const size = getVehicleTyreSize(v);
+                            return size ? (
+                              <span className={`text-xs font-mono px-2 py-0.5 rounded ${
+                                tyreFilter && size === tyreFilter
+                                  ? "bg-blue-100 text-blue-700 font-semibold"
+                                  : "bg-gray-100 text-gray-600"
+                              }`}>{size}</span>
+                            ) : <span className="text-gray-300 text-sm">—</span>;
+                          })()}
+                        </td>
                         <td className="px-6 py-3 whitespace-nowrap">
                           <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
                             v.status === "Operacional" ? "bg-green-100 text-green-700"

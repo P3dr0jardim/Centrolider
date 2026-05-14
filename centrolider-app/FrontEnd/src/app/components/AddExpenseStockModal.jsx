@@ -1,4 +1,4 @@
-import { X, Search, Plus, Minus, PackagePlus, AlertTriangle } from "lucide-react";
+import { X, Search, Plus, Minus, PackagePlus, AlertTriangle, Paperclip } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { api } from "../../services/api";
 
@@ -34,9 +34,10 @@ const sizesMatch = (a, b) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehicle }) {
+export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehicle, markMaintToggle = false }) {
   const [tipo, setTipo] = useState("");
   const [valor, setValor] = useState("");
+  const [markMaint, setMarkMaint] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedItems, setSelectedItems] = useState([]);
   const [customItems, setCustomItems] = useState([]);
@@ -50,8 +51,15 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
   const [customCategoria, setCustomCategoria] = useState("outros");
   const [customQty, setCustomQty] = useState(1);
 
+  // Extra cost line items: [{ id, descricao, valor }]
+  const [extraCosts, setExtraCosts] = useState([]);
+
+  // Document attachment (maintenance types only)
+  const [attachmentFile, setAttachmentFile] = useState(null);
+
   // Tyre-size mismatch warning: { item, vehicleSize, itemSize }
   const [tyreMismatch, setTyreMismatch] = useState(null);
+  const [stockWarning, setStockWarning] = useState(null); // { nome, available }
 
   useEffect(() => {
     if (!isOpen) return;
@@ -80,10 +88,16 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
     }, 0);
   }, [selectedItems, stockItems]);
 
-  // Keep valor in sync with stock total whenever items change,
-  // but only if every selected item has a price (so we don't silently zero out)
+  const extraCostsTotal = useMemo(
+    () => extraCosts.reduce((s, c) => s + (parseFloat(c.valor) || 0), 0),
+    [extraCosts]
+  );
+
+  // Keep valor in sync with stock + extra costs whenever items change
   useEffect(() => {
-    if (selectedItems.length === 0 && customItems.length === 0) {
+    const hasStock   = selectedItems.length > 0 || customItems.length > 0;
+    const hasExtras  = extraCosts.some((c) => parseFloat(c.valor) > 0);
+    if (!hasStock && !hasExtras) {
       setValor("");
       return;
     }
@@ -91,10 +105,10 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
       const full = stockItems.find((s) => s._id === sel._id);
       return full?.preco != null && full.preco > 0;
     });
-    if (allHavePrice && selectedItems.length > 0) {
-      setValor(stockTotal.toFixed(2));
+    if ((allHavePrice && selectedItems.length > 0) || hasExtras) {
+      setValor((stockTotal + extraCostsTotal).toFixed(2));
     }
-  }, [selectedItems, customItems, stockTotal, stockItems]);
+  }, [selectedItems, customItems, extraCosts, stockTotal, extraCostsTotal, stockItems]);
 
   if (!isOpen) return null;
 
@@ -102,8 +116,9 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
 
   const handleClose = () => {
     setTipo(""); setValor(""); setSearchTerm(""); setSelectedItems([]); setCustomItems([]);
-    setSaving(false); setError(null); setTyreMismatch(null);
+    setSaving(false); setError(null); setTyreMismatch(null); setStockWarning(null);
     setShowCustomForm(false); setCustomNome(""); setCustomCategoria("outros"); setCustomQty(1);
+    setMarkMaint(true); setExtraCosts([]); setAttachmentFile(null);
     onClose();
   };
 
@@ -118,12 +133,26 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
       descricao: fd.get("descricao") || undefined,
       kms: fd.get("kms") || undefined,
       oficina: fd.get("oficina") || undefined,
-      materiaisUsados: [...selectedItems, ...customItems],
+      materiaisUsados: [...selectedItems, ...customItems].map((i) => ({
+        nome: i.nome,
+        quantidade: i.quantidade,
+      })),
+      custoAdicional: extraCosts
+        .filter((c) => c.descricao || parseFloat(c.valor) > 0)
+        .map((c) => ({ descricao: c.descricao, valor: parseFloat(c.valor) || 0 })),
+      ...(markMaintToggle ? { markAsManutencao: markMaint } : {}),
     };
     setSaving(true);
     setError(null);
     try {
-      await onSave(data);
+      const result = await onSave(data);
+      if (attachmentFile && result?.vehicleId && result?.maintenanceRecordId) {
+        const attachFd = new FormData();
+        attachFd.append("file", attachmentFile);
+        attachFd.append("manutencaoId", String(result.maintenanceRecordId));
+        attachFd.append("data", data.data);
+        await api.addAttachment(result.vehicleId, attachFd);
+      }
       handleClose();
     } catch (err) {
       setError(err.message);
@@ -161,8 +190,19 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
   };
 
   const updateStockQty = (id, qty) => {
-    if (qty <= 0) setSelectedItems((prev) => prev.filter((i) => i._id !== id));
-    else setSelectedItems((prev) => prev.map((i) => (i._id === id ? { ...i, quantidade: qty } : i)));
+    if (qty <= 0) {
+      setSelectedItems((prev) => prev.filter((i) => i._id !== id));
+      setStockWarning(null);
+      return;
+    }
+    const full = stockItems.find((s) => s._id === id);
+    const available = full?.quantidade ?? Infinity;
+    if (qty > available) {
+      setStockWarning({ nome: full?.nome || id, available });
+      return;
+    }
+    setStockWarning(null);
+    setSelectedItems((prev) => prev.map((i) => (i._id === id ? { ...i, quantidade: qty } : i)));
   };
 
   // ── Custom items ──────────────────────────────────────────────────────────
@@ -268,6 +308,28 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 resize-none" />
             </div>
 
+            {/* ── Document attachment (maintenance only) ──────────────────── */}
+            {isMaintenance && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Documento Anexo (opcional)</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors flex-1 min-w-0">
+                    <Paperclip className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <span className="text-sm text-gray-500 truncate">
+                      {attachmentFile ? attachmentFile.name : "Selecionar ficheiro…"}
+                    </span>
+                    <input type="file" className="hidden" onChange={(e) => setAttachmentFile(e.target.files[0] || null)} />
+                  </label>
+                  {attachmentFile && (
+                    <button type="button" onClick={() => setAttachmentFile(null)}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* ── Materials section (maintenance only) ───────────────────── */}
             {isMaintenance && (
               <div className="border-t border-gray-200 pt-5 space-y-4">
@@ -361,12 +423,24 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
                   </div>
                 )}
 
+                {/* Stock quantity warning */}
+                {stockWarning && (
+                  <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>
+                      Apenas <strong>{stockWarning.available}</strong> unidade{stockWarning.available !== 1 ? "s" : ""} de <strong>{stockWarning.nome}</strong> disponíveis em stock.
+                    </span>
+                  </div>
+                )}
+
                 {/* Selected stock items */}
                 {selectedItems.map((item) => {
                   const full = stockItems.find((s) => s._id === item._id);
                   const lineTotal = full?.preco ? full.preco * item.quantidade : null;
+                  const available = full?.quantidade ?? Infinity;
+                  const atLimit = item.quantidade >= available;
                   return (
-                  <div key={item._id} className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div key={item._id} className={`flex items-center gap-3 p-3 border rounded-lg ${atLimit ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"}`}>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{item.nome}</p>
                       <p className="text-xs text-blue-600 capitalize">
@@ -374,6 +448,11 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
                         {lineTotal != null && (
                           <span className="ml-1 text-green-700 font-semibold">
                             · €{full.preco.toFixed(2)}/un = €{lineTotal.toFixed(2)}
+                          </span>
+                        )}
+                        {available !== Infinity && (
+                          <span className={`ml-1 ${atLimit ? "text-red-600 font-semibold" : "text-gray-400"}`}>
+                            · stock: {available}
                           </span>
                         )}
                       </p>
@@ -385,7 +464,8 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
                       </button>
                       <span className="text-sm font-semibold text-gray-900 w-8 text-center">{item.quantidade}</span>
                       <button type="button" onClick={() => updateStockQty(item._id, item.quantidade + 1)}
-                        className="p-1 text-gray-600 hover:bg-white rounded transition-colors">
+                        disabled={atLimit}
+                        className="p-1 text-gray-600 hover:bg-white rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                         <Plus className="w-4 h-4" />
                       </button>
                       <button type="button" onClick={() => updateStockQty(item._id, 0)}
@@ -465,19 +545,101 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
                     </button>
                   )}
                 </div>
+
+                {/* ── Extra costs section ──────────────────────────────────── */}
+                <div className="border-t border-gray-200 pt-4 space-y-2">
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Custos Adicionais
+                    {extraCosts.length > 0 && (
+                      <span className="ml-1 text-orange-600 normal-case font-semibold">
+                        ({extraCosts.length}) — €{extraCostsTotal.toFixed(2)}
+                      </span>
+                    )}
+                  </label>
+
+                  {extraCosts.map((c, idx) => (
+                    <div key={c.id} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={c.descricao}
+                        onChange={(e) =>
+                          setExtraCosts((prev) =>
+                            prev.map((x, i) => (i === idx ? { ...x, descricao: e.target.value } : x))
+                          )
+                        }
+                        placeholder="Descrição (ex: Mão de obra)"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      />
+                      <input
+                        type="number"
+                        value={c.valor}
+                        onChange={(e) =>
+                          setExtraCosts((prev) =>
+                            prev.map((x, i) => (i === idx ? { ...x, valor: e.target.value } : x))
+                          )
+                        }
+                        placeholder="€0.00"
+                        step="0.01"
+                        min="0"
+                        className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setExtraCosts((prev) => prev.filter((_, i) => i !== idx))}
+                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExtraCosts((prev) => [...prev, { id: Date.now(), descricao: "", valor: "" }])
+                    }
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Adicionar custo extra (ex: mão de obra, reparação)
+                  </button>
+
+                  {(stockTotal > 0 || extraCostsTotal > 0) && extraCosts.length > 0 && (
+                    <div className="flex justify-end text-sm text-gray-600 pt-1">
+                      Stock: €{stockTotal.toFixed(2)} + Extras: €{extraCostsTotal.toFixed(2)}&nbsp;
+                      = <strong className="ml-1">€{(stockTotal + extraCostsTotal).toFixed(2)}</strong>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
-            <button type="button" onClick={handleClose}
-              className="px-5 py-2.5 text-gray-700 font-medium hover:bg-gray-200 rounded-lg transition-colors">
-              Cancelar
-            </button>
-            <button type="submit" disabled={saving}
-              className="px-5 py-2.5 bg-red-600 text-white font-medium hover:bg-red-700 rounded-lg transition-colors shadow-sm disabled:opacity-60">
-              {saving ? "A guardar…" : "Guardar"}
-            </button>
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
+            {markMaintToggle && vehicle?.status !== "Manutenção" && (
+              <button
+                type="button"
+                onClick={() => setMarkMaint((v) => !v)}
+                className="flex items-center gap-3 cursor-pointer select-none w-full text-left"
+              >
+                <div className={`w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${markMaint ? "bg-orange-500" : "bg-gray-300"}`}>
+                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${markMaint ? "translate-x-4" : ""}`} />
+                </div>
+                <span className="text-sm text-gray-700">
+                  Marcar <strong>{vehicle?.matricula}</strong> como <strong>Em Manutenção</strong>
+                </span>
+              </button>
+            )}
+            <div className="flex items-center justify-end gap-3">
+              <button type="button" onClick={handleClose}
+                className="px-5 py-2.5 text-gray-700 font-medium hover:bg-gray-200 rounded-lg transition-colors">
+                Cancelar
+              </button>
+              <button type="submit" disabled={saving}
+                className="px-5 py-2.5 bg-red-600 text-white font-medium hover:bg-red-700 rounded-lg transition-colors shadow-sm disabled:opacity-60">
+                {saving ? "A guardar…" : "Guardar"}
+              </button>
+            </div>
           </div>
         </form>
       </div>

@@ -48,6 +48,8 @@ export function FleetCard({
   totalVehicles,
   maintenanceAlerts,
   performanceChange,
+  notifCount = 0,
+  onBellClick,
 }) {
   const hasAlerts = maintenanceAlerts > 0;
   const style = getFleetStyle(name);
@@ -84,10 +86,20 @@ export function FleetCard({
           </div>
         )}
 
-        {/* Notification Icon */}
-        <div className="absolute top-3 left-3 bg-white/20 backdrop-blur-sm p-2 rounded-full">
+        {/* Notification Bell */}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onBellClick?.(); }}
+          className="absolute top-3 left-3 bg-white/20 backdrop-blur-sm p-2 rounded-full hover:bg-white/30 transition-colors"
+          title={notifCount > 0 ? `${notifCount} notificação${notifCount !== 1 ? "s" : ""}` : "Sem notificações"}
+        >
           <Bell className="w-4 h-4 text-white" />
-        </div>
+          {notifCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5 shadow">
+              {notifCount > 99 ? "99+" : notifCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Content Section */}

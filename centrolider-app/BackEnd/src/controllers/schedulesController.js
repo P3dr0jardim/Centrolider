@@ -1,5 +1,11 @@
 const Schedule = require('../models/Schedule');
 const { syncVehicleStatuses } = require('../utils/syncStatus');
+const { logActivity } = require('../utils/logActivity');
+
+const TIPO_PT = {
+  servico: 'Serviço', manutencao: 'Manutenção', inspecao: 'Inspeção',
+  seguro: 'Seguro', outro: 'Outro',
+};
 
 exports.getAll = async (req, res) => {
   try {
@@ -34,6 +40,16 @@ exports.create = async (req, res) => {
   try {
     const doc = await Schedule.create(req.body);
     const schedule = await doc.populate('viaturaId', 'matricula modelo');
+    const mat = schedule.viaturaId?.matricula || '—';
+    const tipo = TIPO_PT[schedule.tipoEvento] || schedule.tipoEvento || 'Evento';
+    logActivity({
+      user: req.user,
+      acao: 'Agendou',
+      entidade: 'Agenda',
+      descricao: `Agendou ${tipo} para a viatura ${mat}`,
+      referencia: mat,
+      referenciaId: schedule._id,
+    });
     syncVehicleStatuses().catch(console.error);
     res.status(201).json(schedule);
   } catch (err) {
@@ -46,6 +62,16 @@ exports.update = async (req, res) => {
     const schedule = await Schedule.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
       .populate('viaturaId', 'matricula modelo');
     if (!schedule) return res.status(404).json({ message: 'Schedule not found' });
+    const mat = schedule.viaturaId?.matricula || '—';
+    const tipo = TIPO_PT[schedule.tipoEvento] || schedule.tipoEvento || 'Evento';
+    logActivity({
+      user: req.user,
+      acao: 'Editou',
+      entidade: 'Agenda',
+      descricao: `Editou agendamento de ${tipo} para a viatura ${mat}`,
+      referencia: mat,
+      referenciaId: schedule._id,
+    });
     syncVehicleStatuses().catch(console.error);
     res.status(200).json(schedule);
   } catch (err) {
@@ -57,6 +83,13 @@ exports.remove = async (req, res) => {
   try {
     const schedule = await Schedule.findByIdAndDelete(req.params.id);
     if (!schedule) return res.status(404).json({ message: 'Schedule not found' });
+    logActivity({
+      user: req.user,
+      acao: 'Eliminou',
+      entidade: 'Agenda',
+      descricao: `Eliminou agendamento de ${TIPO_PT[schedule.tipoEvento] || schedule.tipoEvento || 'Evento'}`,
+      referenciaId: schedule._id,
+    });
     syncVehicleStatuses().catch(console.error);
     res.json({ message: 'Schedule deleted' });
   } catch (err) {

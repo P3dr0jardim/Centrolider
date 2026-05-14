@@ -1,5 +1,5 @@
-import { X } from "lucide-react";
-import { useState, useEffect } from "react";
+import { X, AlertTriangle, ChevronDown } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
 
 const CATEGORIAS = [
   { value: "pneus",    label: "Pneus" },
@@ -11,22 +11,23 @@ const CATEGORIAS = [
   { value: "outros",   label: "Outros" },
 ];
 
-export function AddStockModal({ isOpen, onClose, onSave, item }) {
+export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [] }) {
   const [categoria, setCategoria] = useState("");
-  const [nome, setNome] = useState("");
+  const [nome, setNome]           = useState("");
   const [quantidade, setQuantidade] = useState("");
-  const [minimo, setMinimo] = useState("");
+  const [minimo, setMinimo]       = useState("");
   const [fornecedor, setFornecedor] = useState("");
-  const [preco, setPreco] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const [preco, setPreco]         = useState("");
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState(null);
+  const [showSugg, setShowSugg]   = useState(false);
 
-  const isEdit = !!item;
+  const suggRef = useRef(null);
+  const isEdit  = !!item;
 
   useEffect(() => {
     if (!isOpen) return;
-    setSaving(false);
-    setError(null);
+    setSaving(false); setError(null); setShowSugg(false);
     if (isEdit) {
       setCategoria(item.categoria || "");
       setNome(item.nome || "");
@@ -35,34 +36,65 @@ export function AddStockModal({ isOpen, onClose, onSave, item }) {
       setFornecedor(item.fornecedor || "");
       setPreco(item.preco ?? "");
     } else {
-      setCategoria("");
-      setNome("");
-      setQuantidade("");
-      setMinimo("");
-      setFornecedor("");
-      setPreco("");
+      setCategoria(""); setNome(""); setQuantidade(""); setMinimo("");
+      setFornecedor(""); setPreco("");
     }
   }, [isOpen, item]);
+
+  // Close suggestion dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (suggRef.current && !suggRef.current.contains(e.target)) setShowSugg(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Filter suggestions — exclude current item if editing
+  const suggestions = useMemo(() => {
+    const q = nome.trim().toLowerCase();
+    if (!q) return [];
+    return existingItems
+      .filter((i) => (!isEdit || i._id !== item._id) && i.nome.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [nome, existingItems, isEdit, item]);
+
+  // Exact duplicate check (case-insensitive)
+  const isDuplicate = useMemo(() => {
+    if (!nome.trim()) return false;
+    const q = nome.trim().toLowerCase();
+    return existingItems.some(
+      (i) => i.nome.toLowerCase() === q && (!isEdit || i._id !== item?._id)
+    );
+  }, [nome, existingItems, isEdit, item]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSaving(true);
-    setError(null);
+    setSaving(true); setError(null);
     try {
       await onSave({
         categoria,
         nome,
         quantidade: Number(quantidade),
-        minimo: Number(minimo),
+        minimo:     Number(minimo),
         fornecedor: fornecedor || undefined,
-        preco: preco !== "" ? Number(preco) : undefined,
+        preco:      preco !== "" ? Number(preco) : undefined,
       });
     } catch (err) {
       setError(err.message);
       setSaving(false);
     }
+  };
+
+  const pickSuggestion = (s) => {
+    setNome(s.nome);
+    setCategoria(s.categoria || categoria);
+    setFornecedor(s.fornecedor || fornecedor);
+    setPreco(s.preco != null ? String(s.preco) : preco);
+    setMinimo(s.minimo != null ? String(s.minimo) : minimo);
+    setShowSugg(false);
   };
 
   return (
@@ -95,11 +127,61 @@ export function AddStockModal({ isOpen, onClose, onSave, item }) {
               </select>
             </div>
 
+            {/* Nome — with suggestions */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Nome do Item *</label>
-              <input type="text" value={nome} onChange={(e) => setNome(e.target.value)}
-                placeholder="Ex: Pneu 205/55 R16 Michelin" required
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="relative" ref={suggRef}>
+                <input
+                  type="text"
+                  value={nome}
+                  onChange={(e) => { setNome(e.target.value); setShowSugg(true); }}
+                  onFocus={() => nome.trim() && setShowSugg(true)}
+                  placeholder="Ex: Pneu 205/55 R16 Michelin"
+                  required
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 ${
+                    isDuplicate
+                      ? "border-amber-400 focus:ring-amber-400"
+                      : "border-gray-300 focus:ring-blue-500"
+                  }`}
+                />
+
+                {/* Suggestion dropdown */}
+                {showSugg && suggestions.length > 0 && (
+                  <div className="absolute z-20 top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                    <p className="px-3 py-1.5 text-xs text-gray-400 font-medium bg-gray-50 border-b border-gray-100">
+                      Produtos existentes
+                    </p>
+                    <div className="max-h-44 overflow-y-auto divide-y divide-gray-100">
+                      {suggestions.map((s) => (
+                        <button
+                          key={s._id}
+                          type="button"
+                          onClick={() => pickSuggestion(s)}
+                          className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{s.nome}</p>
+                            <p className="text-xs text-gray-400 capitalize">{s.categoria} · {s.quantidade} un.</p>
+                          </div>
+                          {s.preco != null && (
+                            <span className="text-xs text-green-700 font-semibold ml-2 flex-shrink-0">
+                              €{s.preco.toFixed(2)}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Duplicate warning */}
+              {isDuplicate && (
+                <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600" />
+                  <span>Já existe um produto com este nome no stock.</span>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

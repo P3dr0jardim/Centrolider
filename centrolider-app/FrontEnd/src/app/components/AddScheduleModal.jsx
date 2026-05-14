@@ -1,5 +1,5 @@
-import { X } from "lucide-react";
-import { useState, useEffect } from "react";
+import { X, Search, Car } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
 
 const TIPOS = [
   { value: "inspecao",   label: "Inspeção (IPO)" },
@@ -11,6 +11,12 @@ const TIPOS = [
   { value: "outro",      label: "Outro" },
 ];
 
+const STATUS_DOT = {
+  Operacional: "bg-green-500",
+  Manutenção:  "bg-orange-500",
+  Inativo:     "bg-red-500",
+};
+
 export function AddScheduleModal({
   isOpen, onClose, onSave,
   selectedDate,
@@ -18,23 +24,24 @@ export function AddScheduleModal({
   prefill,
   vehicles = [],
 }) {
-  const [viaturaId, setViaturaId] = useState("");
-  const [tipoEvento, setTipoEvento] = useState("");
-  const [dataInicio, setDataInicio] = useState("");
-  const [horaInicio, setHoraInicio] = useState("09:00");
-  const [dataFim, setDataFim] = useState("");
-  const [horaFim, setHoraFim] = useState("17:00");
-  const [notas, setNotas] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const [viaturaId, setViaturaId]       = useState("");
+  const [vehicleSearch, setVehicleSearch] = useState("");
+  const [dropOpen, setDropOpen]         = useState(false);
+  const [tipoEvento, setTipoEvento]     = useState("");
+  const [dataInicio, setDataInicio]     = useState("");
+  const [horaInicio, setHoraInicio]     = useState("09:00");
+  const [dataFim, setDataFim]           = useState("");
+  const [horaFim, setHoraFim]           = useState("17:00");
+  const [notas, setNotas]               = useState("");
+  const [saving, setSaving]             = useState(false);
+  const [error, setError]               = useState(null);
 
-  const isEdit = !!schedule;
+  const dropRef = useRef(null);
+  const isEdit  = !!schedule;
 
   useEffect(() => {
     if (!isOpen) return;
-    setSaving(false);
-    setError(null);
-
+    setSaving(false); setError(null);
     if (isEdit) {
       const v = schedule.viaturaId;
       setViaturaId(typeof v === "object" ? v._id : v || "");
@@ -54,28 +61,61 @@ export function AddScheduleModal({
       setHoraFim("17:00");
       setNotas("");
     }
+    setVehicleSearch(""); setDropOpen(false);
   }, [isOpen, schedule, selectedDate, prefill]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const selectedVehicle = useMemo(
+    () => vehicles.find((v) => v._id === viaturaId) || null,
+    [vehicles, viaturaId]
+  );
+
+  const filteredVehicles = useMemo(() => {
+    const q = vehicleSearch.trim().toLowerCase();
+    if (!q) return vehicles.slice(0, 12);
+    return vehicles
+      .filter(
+        (v) =>
+          v.matricula.toLowerCase().includes(q) ||
+          v.modelo.toLowerCase().includes(q) ||
+          (v.condutor || "").toLowerCase().includes(q)
+      )
+      .slice(0, 12);
+  }, [vehicles, vehicleSearch]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSaving(true);
-    setError(null);
+    if (!viaturaId) { setError("Selecione uma viatura."); return; }
+    setSaving(true); setError(null);
     try {
-      await onSave({
-        viaturaId,
-        tipoEvento,
-        dataInicio,
-        horaInicio,
-        dataFim: dataFim || dataInicio,
-        horaFim,
-        notas,
-      });
+      await onSave({ viaturaId, tipoEvento, dataInicio, horaInicio, dataFim: dataFim || dataInicio, horaFim, notas });
     } catch (err) {
       setError(err.message);
       setSaving(false);
     }
+  };
+
+  const selectVehicle = (v) => {
+    setViaturaId(v._id);
+    setVehicleSearch("");
+    setDropOpen(false);
+  };
+
+  const clearVehicle = (e) => {
+    e.stopPropagation();
+    setViaturaId("");
+    setVehicleSearch("");
+    setDropOpen(true);
   };
 
   return (
@@ -87,10 +127,7 @@ export function AddScheduleModal({
           <h3 className="text-xl font-semibold text-gray-900">
             {isEdit ? "Editar Agendamento" : "Novo Agendamento"}
           </h3>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          >
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -99,38 +136,90 @@ export function AddScheduleModal({
         <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[calc(90vh-140px)]">
           <div className="px-6 py-5 space-y-4">
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
-                {error}
-              </div>
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>
             )}
 
-            {/* Viatura */}
+            {/* Viatura — searchable */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Viatura *</label>
-              <select
-                value={viaturaId}
-                onChange={(e) => setViaturaId(e.target.value)}
-                required
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="">Selecione a viatura</option>
-                {vehicles.map((v) => (
-                  <option key={v._id} value={v._id}>
-                    {v.matricula} – {v.modelo}
-                  </option>
-                ))}
-              </select>
+              <div className="relative" ref={dropRef}>
+                {selectedVehicle ? (
+                  /* Selected vehicle chip */
+                  <div className="flex items-center gap-3 px-4 py-2.5 border border-blue-400 bg-blue-50 rounded-lg">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[selectedVehicle.status] || "bg-gray-400"}`} />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-semibold text-gray-900">{selectedVehicle.matricula}</span>
+                      <span className="text-gray-500 ml-2 text-sm">{selectedVehicle.modelo}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearVehicle}
+                      className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  /* Search input */
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Pesquisar matrícula ou modelo…"
+                      value={vehicleSearch}
+                      onChange={(e) => { setVehicleSearch(e.target.value); setDropOpen(true); }}
+                      onFocus={() => setDropOpen(true)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoComplete="off"
+                    />
+                  </div>
+                )}
+
+                {/* Dropdown */}
+                {dropOpen && !selectedVehicle && (
+                  <div className="absolute z-20 top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                    {filteredVehicles.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-gray-400 text-center">Nenhuma viatura encontrada</div>
+                    ) : (
+                      <div className="max-h-52 overflow-y-auto divide-y divide-gray-100">
+                        {filteredVehicles.map((v) => (
+                          <button
+                            key={v._id}
+                            type="button"
+                            onClick={() => selectVehicle(v)}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 text-left transition-colors"
+                          >
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[v.status] || "bg-gray-400"}`} />
+                            <div className="flex-1 min-w-0">
+                              <span className="font-semibold text-gray-900 text-sm">{v.matricula}</span>
+                              <span className="text-gray-500 text-sm ml-2">{v.modelo}</span>
+                            </div>
+                            {v.status && (
+                              <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                                v.status === "Operacional" ? "bg-green-100 text-green-700" :
+                                v.status === "Manutenção"  ? "bg-orange-100 text-orange-700" :
+                                "bg-red-100 text-red-700"
+                              }`}>
+                                {v.status}
+                              </span>
+                            )}
+                            {v.condutor && (
+                              <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:block">{v.condutor}</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Tipo de Evento */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Evento *</label>
-              <select
-                value={tipoEvento}
-                onChange={(e) => setTipoEvento(e.target.value)}
-                required
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
+              <select value={tipoEvento} onChange={(e) => setTipoEvento(e.target.value)} required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                 <option value="">Selecione o tipo</option>
                 {TIPOS.map((t) => (
                   <option key={t.value} value={t.value}>{t.label}</option>
@@ -142,22 +231,13 @@ export function AddScheduleModal({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Data de Início *</label>
-                <input
-                  type="date"
-                  value={dataInicio}
-                  onChange={(e) => setDataInicio(e.target.value)}
-                  required
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} required
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Hora</label>
-                <input
-                  type="time"
-                  value={horaInicio}
-                  onChange={(e) => setHoraInicio(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
 
@@ -165,53 +245,34 @@ export function AddScheduleModal({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Data de Fim</label>
-                <input
-                  type="date"
-                  value={dataFim}
-                  onChange={(e) => setDataFim(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Hora de Fim</label>
-                <input
-                  type="time"
-                  value={horaFim}
-                  onChange={(e) => setHoraFim(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <input type="time" value={horaFim} onChange={(e) => setHoraFim(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
 
             {/* Notas */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Notas / Observações
-              </label>
-              <textarea
-                value={notas}
-                onChange={(e) => setNotas(e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-2">Notas / Observações</label>
+              <textarea value={notas} onChange={(e) => setNotas(e.target.value)}
                 placeholder="Descrição adicional, endereço da oficina, contacto, etc."
                 rows={3}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              />
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             </div>
           </div>
 
           {/* Footer */}
           <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 text-gray-700 font-medium hover:bg-gray-200 rounded-lg transition-colors"
-            >
+            <button type="button" onClick={onClose}
+              className="px-5 py-2.5 text-gray-700 font-medium hover:bg-gray-200 rounded-lg transition-colors">
               Cancelar
             </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-5 py-2.5 bg-blue-600 text-white font-medium hover:bg-blue-700 rounded-lg transition-colors shadow-sm disabled:opacity-50"
-            >
+            <button type="submit" disabled={saving}
+              className="px-5 py-2.5 bg-blue-600 text-white font-medium hover:bg-blue-700 rounded-lg transition-colors shadow-sm disabled:opacity-50">
               {saving ? "A guardar…" : isEdit ? "Guardar Alterações" : "Criar Agendamento"}
             </button>
           </div>
