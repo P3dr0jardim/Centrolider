@@ -1,4 +1,4 @@
-import { X, Plus, Pencil, Trash2 } from "lucide-react";
+import { X, Plus, Pencil, Trash2, MapPin } from "lucide-react";
 
 export const TIPO_CONFIG = {
   inspecao:   { label: "Inspeção (IPO)",        color: "bg-red-100 text-red-700 border-red-300" },
@@ -97,6 +97,12 @@ export function DayEventsModal({ dateKey, events, onClose, onAdd, onEdit, onDele
                   {(ev.horaInicio || ev.horaFim) && (
                     <p className="text-xs text-gray-500 mt-0.5">
                       {ev.horaInicio}{ev.horaFim ? ` – ${ev.horaFim}` : ""}
+                    </p>
+                  )}
+                  {ev.oficina && (
+                    <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 flex-shrink-0" />
+                      {ev.oficina}
                     </p>
                   )}
                   {ev.notas && (

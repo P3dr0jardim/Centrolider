@@ -1,4 +1,4 @@
-import { Car, AlertCircle, CheckCircle, Clock, TrendingUp } from "lucide-react";
+import { Car, AlertCircle, CheckCircle, Clock, TrendingUp, X, Wrench, Package, Bell } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { StatCard } from "./StatCard";
 import { FleetCard } from "./FleetCard";
@@ -13,13 +13,16 @@ const STATUS_COLORS = {
   Inativo: "#ef4444",
 };
 
-export function FrotasView() {
+export function FrotasView({ onNavigate, onVehicleSelect }) {
   const [selectedFleet, setSelectedFleet] = useState(null);
   const [fleets, setFleets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isAddFleetOpen, setIsAddFleetOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [showAlertsModal, setShowAlertsModal] = useState(false);
+  const [loadingNotifVehicleId, setLoadingNotifVehicleId] = useState(null);
+  const [bellFleetId, setBellFleetId] = useState(null);
 
   useEffect(() => {
     api.getFleets()
@@ -41,6 +44,20 @@ export function FrotasView() {
     }
     return map;
   }, [notifications]);
+
+  const handleOpenNotifVehicle = async (vehicleId) => {
+    if (!vehicleId || !onVehicleSelect) return;
+    setLoadingNotifVehicleId(String(vehicleId));
+    try {
+      const v = await api.getVehicle(vehicleId);
+      setShowAlertsModal(false);
+      onVehicleSelect(v);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingNotifVehicleId(null);
+    }
+  };
 
   if (selectedFleet) {
     return (
@@ -77,6 +94,7 @@ export function FrotasView() {
           changeType="positive"
           icon={Car}
           iconColor="bg-blue-100 text-blue-600"
+          onClick={onNavigate ? () => onNavigate("frota-global") : undefined}
         />
         <StatCard
           title="Operacionais"
@@ -85,6 +103,7 @@ export function FrotasView() {
           changeType="positive"
           icon={CheckCircle}
           iconColor="bg-green-100 text-green-600"
+          onClick={onNavigate ? () => onNavigate("frota-global", "Operacional") : undefined}
         />
         <StatCard
           title="Em Manutenção"
@@ -93,14 +112,16 @@ export function FrotasView() {
           changeType="neutral"
           icon={Car}
           iconColor="bg-orange-100 text-orange-600"
+          onClick={onNavigate ? () => onNavigate("manutencao") : undefined}
         />
         <StatCard
           title="Alertas Ativos"
-          value={loading ? "—" : totalManutencao.toString()}
-          change="Em manutenção"
-          changeType={totalManutencao > 0 ? "negative" : "positive"}
+          value={loading ? "—" : notifications.length.toString()}
+          change="Ver detalhes"
+          changeType={notifications.length > 0 ? "negative" : "positive"}
           icon={AlertCircle}
           iconColor="bg-red-100 text-red-600"
+          onClick={() => setShowAlertsModal(true)}
         />
       </div>
 
@@ -140,6 +161,7 @@ export function FrotasView() {
                   performanceChange={fleet.totalVehicles > 0 ? `${fleet.activeVehicles} operacionais` : "Sem veículos"}
                   imageUrl={fleet.imageUrl}
                   notifCount={fleetNotifCounts[String(fleet._id)] || 0}
+                  onBellClick={() => setBellFleetId(String(fleet._id))}
                 />
               </div>
             ))}
@@ -242,6 +264,180 @@ export function FrotasView() {
           setFleets((prev) => [...prev, { ...fleet, totalVehicles: 0, activeVehicles: 0, maintenanceAlerts: 0 }]);
         }}
       />
+
+      {bellFleetId && (() => {
+        const fleet = fleets.find((f) => String(f._id) === bellFleetId);
+        const fleetNotifs = notifications.filter(
+          (n) => n.frotaId && String(n.frotaId) === bellFleetId
+        );
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setBellFleetId(null)} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
+              <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-100 rounded-xl">
+                    <AlertCircle className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900">{fleet?.name || "Frota"}</h3>
+                    <p className="text-sm text-gray-500">{fleetNotifs.length} alerta{fleetNotifs.length !== 1 ? "s" : ""}</p>
+                  </div>
+                </div>
+                <button onClick={() => setBellFleetId(null)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto flex-1 px-6 py-5 space-y-2">
+                {fleetNotifs.length === 0 ? (
+                  <p className="text-center text-gray-400 py-8">Sem alertas para esta frota</p>
+                ) : (
+                  fleetNotifs.map((n, i) => {
+                    const isMaint    = n.type === "maintenance";
+                    const isUpcoming = n.type === "upcoming";
+                    const isHigh     = n.severity === "high";
+                    const bgClass    = isMaint && isHigh ? "bg-red-50 border-red-200"
+                                     : isMaint           ? "bg-orange-50 border-orange-200"
+                                     : isUpcoming        ? "bg-blue-50 border-blue-200"
+                                     : isHigh            ? "bg-red-50 border-red-200"
+                                                         : "bg-yellow-50 border-yellow-200";
+                    const iconBg     = isMaint && isHigh ? "bg-red-100" : isMaint ? "bg-orange-100" : isUpcoming ? "bg-blue-100" : isHigh ? "bg-red-100" : "bg-yellow-100";
+                    const msgClass   = isMaint && isHigh ? "text-red-800" : isMaint ? "text-orange-800" : isUpcoming ? "text-blue-800" : isHigh ? "text-red-800" : "text-yellow-800";
+                    const badgeClass = isHigh ? "bg-red-100 text-red-700" : n.severity === "medium" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700";
+                    const badgeLabel = isHigh ? "Urgente" : n.severity === "medium" ? "Atenção" : "Info";
+                    return (
+                      <div key={i} className={`flex items-start gap-3 p-3.5 rounded-xl border ${bgClass}`}>
+                        <div className={`p-1.5 rounded-lg flex-shrink-0 ${iconBg}`}>
+                          {isMaint ? <Wrench className="w-4 h-4 text-orange-600" />
+                          : isUpcoming ? <Clock className="w-4 h-4 text-blue-600" />
+                                       : <Package className="w-4 h-4 text-yellow-600" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${msgClass}`}>{n.message}</p>
+                          {n.modelo && <p className="text-xs text-gray-500 mt-0.5">{n.modelo}</p>}
+                          {n.vehicleId && onVehicleSelect && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenNotifVehicle(String(n.vehicleId))}
+                              disabled={!!loadingNotifVehicleId}
+                              className="mt-1.5 flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-40"
+                            >
+                              {loadingNotifVehicleId === String(n.vehicleId)
+                                ? <><div className="w-3 h-3 border border-blue-500 border-t-transparent rounded-full animate-spin" /> A carregar…</>
+                                : "Ver viatura →"}
+                            </button>
+                          )}
+                        </div>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${badgeClass}`}>{badgeLabel}</span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-2xl flex justify-end">
+                <button onClick={() => setBellFleetId(null)} className="px-5 py-2.5 bg-gray-800 text-white font-medium rounded-lg hover:bg-gray-900 transition-colors">
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {showAlertsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAlertsModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-xl">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">Alertas Ativos</h3>
+                  <p className="text-sm text-gray-500">{notifications.length} alerta{notifications.length !== 1 ? "s" : ""}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAlertsModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-2">
+              {notifications.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">Sem alertas ativos</p>
+              ) : (
+                notifications.map((n, i) => {
+                  const isMaint    = n.type === "maintenance";
+                  const isUpcoming = n.type === "upcoming";
+                  const isHigh     = n.severity === "high";
+                  const bgClass    = isMaint && isHigh ? "bg-red-50 border-red-200"
+                                   : isMaint           ? "bg-orange-50 border-orange-200"
+                                   : isUpcoming        ? "bg-blue-50 border-blue-200"
+                                   : isHigh            ? "bg-red-50 border-red-200"
+                                                       : "bg-yellow-50 border-yellow-200";
+                  const iconBg     = isMaint && isHigh ? "bg-red-100"
+                                   : isMaint           ? "bg-orange-100"
+                                   : isUpcoming        ? "bg-blue-100"
+                                   : isHigh            ? "bg-red-100"
+                                                       : "bg-yellow-100";
+                  const msgClass   = isMaint && isHigh ? "text-red-800"
+                                   : isMaint           ? "text-orange-800"
+                                   : isUpcoming        ? "text-blue-800"
+                                   : isHigh            ? "text-red-800"
+                                                       : "text-yellow-800";
+                  const badgeClass = isHigh ? "bg-red-100 text-red-700"
+                                   : n.severity === "medium" ? "bg-orange-100 text-orange-700"
+                                   : "bg-blue-100 text-blue-700";
+                  const badgeLabel = isHigh ? "Urgente" : n.severity === "medium" ? "Atenção" : "Info";
+                  return (
+                    <div key={i} className={`flex items-start gap-3 p-3.5 rounded-xl border ${bgClass}`}>
+                      <div className={`p-1.5 rounded-lg flex-shrink-0 ${iconBg}`}>
+                        {isMaint    ? <Wrench    className="w-4 h-4 text-orange-600" />
+                        : isUpcoming ? <Clock     className="w-4 h-4 text-blue-600" />
+                                     : <Package   className="w-4 h-4 text-yellow-600" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium ${msgClass}`}>{n.message}</p>
+                        {n.modelo && <p className="text-xs text-gray-500 mt-0.5">{n.modelo}</p>}
+                        {n.vehicleId && onVehicleSelect && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenNotifVehicle(String(n.vehicleId))}
+                            disabled={!!loadingNotifVehicleId}
+                            className="mt-1.5 flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-40"
+                          >
+                            {loadingNotifVehicleId === String(n.vehicleId)
+                              ? <><div className="w-3 h-3 border border-blue-500 border-t-transparent rounded-full animate-spin" /> A carregar…</>
+                              : "Ver viatura →"}
+                          </button>
+                        )}
+                      </div>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${badgeClass}`}>
+                        {badgeLabel}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-2xl flex justify-end">
+              <button
+                onClick={() => setShowAlertsModal(false)}
+                className="px-5 py-2.5 bg-gray-800 text-white font-medium rounded-lg hover:bg-gray-900 transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

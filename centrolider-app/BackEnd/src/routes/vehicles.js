@@ -26,6 +26,8 @@ const upload = multer({
 router.use(auth);
 
 router.get('/', vehiclesController.getAll);
+router.patch('/bulk-financial', vehiclesController.bulkUpdateFinancial);
+router.patch('/bulk-confirm-financial', vehiclesController.bulkConfirmFinancial);
 router.get('/:id', vehiclesController.getOne);
 router.post('/', vehiclesController.create);
 router.put('/:id', vehiclesController.update);

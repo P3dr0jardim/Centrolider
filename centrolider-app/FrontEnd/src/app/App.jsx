@@ -16,6 +16,13 @@ export default function App() {
   const { user, loading } = useAuth();
   const [activeMenu, setActiveMenu] = useState("frotas");
   const [globalVehicle, setGlobalVehicle] = useState(null);
+  const [frotaGlobalFilter, setFrotaGlobalFilter] = useState("todas");
+
+  const navigate = (menu, filter) => {
+    setGlobalVehicle(null);
+    setActiveMenu(menu);
+    setFrotaGlobalFilter(menu === "frota-global" && filter ? filter : "todas");
+  };
 
   if (loading) {
     return (
@@ -40,15 +47,15 @@ export default function App() {
       );
     }
     switch (activeMenu) {
-      case "frotas":        return <FrotasView />;
+      case "frotas":        return <FrotasView onNavigate={navigate} onVehicleSelect={setGlobalVehicle} />;
       case "manutencao":    return <ManutencaoView />;
-      case "frota-global":  return <FrotaGlobalView />;
+      case "frota-global":  return <FrotaGlobalView key={frotaGlobalFilter} initialStatusFilter={frotaGlobalFilter} />;
       case "agenda":        return <AgendaView />;
       case "rentabilidade": return <RentabilidadeView />;
       case "stock":          return <StockView />;
       case "configuracoes":  return <ConfiguracoesView />;
       case "atividade":      return <AtividadeView />;
-      default:               return <FrotasView />;
+      default:               return <FrotasView onNavigate={navigate} onVehicleSelect={setGlobalVehicle} />;
     }
   };
 
@@ -56,7 +63,7 @@ export default function App() {
     <div className="min-h-screen bg-gray-50">
       <Navbar
         activeMenu={activeMenu}
-        onMenuChange={(menu) => { setGlobalVehicle(null); setActiveMenu(menu); }}
+        onMenuChange={(menu) => { setGlobalVehicle(null); setActiveMenu(menu); setFrotaGlobalFilter("todas"); }}
         onSettingsClick={() => { setGlobalVehicle(null); setActiveMenu("configuracoes"); }}
         onVehicleSelect={setGlobalVehicle}
       />

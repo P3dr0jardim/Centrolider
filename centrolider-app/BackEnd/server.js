@@ -41,8 +41,13 @@ router.use("/stats", require("./src/routes/stats"));
 router.use("/logs", require("./src/routes/logs"));
 router.use("/notifications", require("./src/routes/notifications"));
 
-// /centrolider/api → production (Passenger); /api → local dev
-app.use("/centrolider/api", router);
+// Strip /centrolider prefix in production (Passenger) so routes only need to be registered once
+app.use((req, res, next) => {
+  if (req.url.startsWith("/centrolider/api")) {
+    req.url = req.url.slice("/centrolider".length);
+  }
+  next();
+});
 app.use("/api", router);
 
 app.use((err, req, res, next) => {

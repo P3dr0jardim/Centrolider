@@ -18,12 +18,14 @@ export function AddVehicleModal({ isOpen, onClose, onSave }) {
     const formData = new FormData(e.target);
     const kmVal = formData.get("km");
     const data = {
-      matricula: formData.get("matricula"),
-      modelo: formData.get("modelo"),
-      ano: formData.get("ano") ? Number(formData.get("ano")) : undefined,
-      condutor: formData.get("condutor") || undefined,
-      km: kmVal ? Number(kmVal) : 0,
-      status: "Operacional",
+      matricula:     formData.get("matricula"),
+      modelo:        formData.get("modelo"),
+      ano:           formData.get("ano") ? Number(formData.get("ano")) : undefined,
+      condutor:      formData.get("condutor") || undefined,
+      km:            kmVal ? Number(kmVal) : 0,
+      status:        "Operacional",
+      tipoPneu:      formData.get("tipoPneu") || undefined,
+      pneuOriginal:  formData.get("pneuOriginal") || undefined,
     };
     setSaving(true);
     setError(null);
@@ -82,6 +84,19 @@ export function AddVehicleModal({ isOpen, onClose, onSave }) {
               <input type="number" name="km" placeholder="Ex: 150000" min="0" defaultValue="0"
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               <p className="text-xs text-gray-400 mt-1">Quilometragem actual da viatura ao ser registada.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Pneu *</label>
+                <input type="text" name="tipoPneu" placeholder="Ex: All-Season, 4x4, Verão" required
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tamanho <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <input type="text" name="pneuOriginal" placeholder="Ex: 205/55 R16"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
             </div>
           </div>
 

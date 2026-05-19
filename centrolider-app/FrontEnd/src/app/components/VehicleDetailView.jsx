@@ -79,6 +79,7 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
   const [editAttForm, setEditAttForm] = useState({});      // { originalName, description, data }
   const [savingAtt, setSavingAtt] = useState(false);
   const [showArchivedDocs, setShowArchivedDocs] = useState(false);
+  const [archivingId, setArchivingId] = useState(null);
 
   useEffect(() => {
     setVehicleData(vehicle);
@@ -148,6 +149,7 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
     });
     setExpenses((prev) => [expense, ...prev]);
 
+    let currentVehicle = vehicleData;
     let maintenanceRecordId = null;
     if (MAINTENANCE_TYPES.includes(data.tipo)) {
       const updated = await api.addMaintenance(vehicleData._id, {
@@ -159,6 +161,7 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
         materiaisUsados: data.materiaisUsados || [],
         custoAdicional: data.custoAdicional || [],
       });
+      currentVehicle = updated;
       setVehicleData(updated);
       if (onVehicleUpdated) onVehicleUpdated(updated);
       maintenanceRecordId = updated.historicoManutencao[updated.historicoManutencao.length - 1]?._id;
@@ -180,7 +183,15 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
       }).catch(console.error);
     }
 
-    return { vehicleId: vehicleData._id, maintenanceRecordId };
+    if (data.attachmentFile && maintenanceRecordId) {
+      const attachFd = new FormData();
+      attachFd.append("file", data.attachmentFile);
+      attachFd.append("manutencaoId", String(maintenanceRecordId));
+      attachFd.append("data", data.data);
+      const updatedWithAtt = await api.addAttachment(currentVehicle._id, attachFd);
+      setVehicleData(updatedWithAtt);
+      if (onVehicleUpdated) onVehicleUpdated(updatedWithAtt);
+    }
   };
 
   const handleSaveRevenue = async (data) => {
@@ -246,9 +257,14 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
   };
 
   const handleToggleArchive = async (att) => {
-    const updated = await api.toggleArchiveAttachment(vehicleData._id, att._id);
-    setVehicleData(updated);
-    if (onVehicleUpdated) onVehicleUpdated(updated);
+    setArchivingId(att._id);
+    try {
+      const updated = await api.toggleArchiveAttachment(vehicleData._id, att._id);
+      setVehicleData(updated);
+      if (onVehicleUpdated) onVehicleUpdated(updated);
+    } finally {
+      setArchivingId(null);
+    }
   };
 
   const totalReceitas = revenues.reduce((s, r) => s + r.valor, 0);
@@ -400,6 +416,60 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
         </div>
       </div>
 
+      {/* Encargos Fixos row — only shown when at least one value is set */}
+      {(vehicleData.leasing != null || vehicleData.seguroValor != null || vehicleData.iuc != null) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {vehicleData.leasing != null && (
+            <div className="bg-white rounded-xl border border-indigo-200 p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-indigo-100 rounded-lg">
+                  <Euro className="w-6 h-6 text-indigo-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Leasing</p>
+                  <p className="text-2xl font-bold text-indigo-700">
+                    €{Number(vehicleData.leasing).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-xs text-gray-400">por mês</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {vehicleData.seguroValor != null && (
+            <div className="bg-white rounded-xl border border-purple-200 p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-purple-100 rounded-lg">
+                  <Euro className="w-6 h-6 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Seguro</p>
+                  <p className="text-2xl font-bold text-purple-700">
+                    €{Number(vehicleData.seguroValor).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-xs text-gray-400">por mês</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {vehicleData.iuc != null && (
+            <div className="bg-white rounded-xl border border-amber-200 p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-amber-100 rounded-lg">
+                  <Euro className="w-6 h-6 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">IUC</p>
+                  <p className="text-2xl font-bold text-amber-700">
+                    €{Number(vehicleData.iuc).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-xs text-gray-400">por ano</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="border-b border-gray-200">
@@ -454,6 +524,47 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                     </div>
                   ))}
               </div>
+
+            {/* Encargos Fixos */}
+            {(vehicleData.leasing != null || vehicleData.seguroValor != null || vehicleData.iuc != null) && (
+              <div className="mt-6 pt-6 border-t border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Encargos Fixos</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {vehicleData.leasing != null && (
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                      <p className="text-xs font-medium text-indigo-600 uppercase tracking-wide mb-1">Leasing</p>
+                      <p className="text-xl font-bold text-indigo-900">
+                        €{Number(vehicleData.leasing).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-indigo-500 mt-0.5">por mês</p>
+                    </div>
+                  )}
+                  {vehicleData.seguroValor != null && (
+                    <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+                      <p className="text-xs font-medium text-purple-600 uppercase tracking-wide mb-1">Seguro</p>
+                      <p className="text-xl font-bold text-purple-900">
+                        €{Number(vehicleData.seguroValor).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-purple-500 mt-0.5">por mês</p>
+                    </div>
+                  )}
+                  {vehicleData.iuc != null && (
+                    <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+                      <p className="text-xs font-medium text-amber-600 uppercase tracking-wide mb-1">IUC</p>
+                      <p className="text-xl font-bold text-amber-900">
+                        €{Number(vehicleData.iuc).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-amber-500 mt-0.5">por ano</p>
+                    </div>
+                  )}
+                </div>
+                {vehicleData.valoresFinanceirosEm && (
+                  <p className="text-xs text-gray-400 mt-3">
+                    Valores confirmados em {new Date(vehicleData.valoresFinanceirosEm).toLocaleDateString("pt-PT")}
+                  </p>
+                )}
+              </div>
+            )}
             </div>
           )}
 
@@ -541,6 +652,47 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                         ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* Histórico de alterações de encargos fixos */}
+              {(vehicleData.historicoFinanceiro?.length ?? 0) > 0 && (
+                <div className="mt-6 pt-6 border-t border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Alterações de Encargos Fixos</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Data</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Campo</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Valor Anterior</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Valor Novo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {[...(vehicleData.historicoFinanceiro || [])]
+                          .sort((a, b) => new Date(b.data) - new Date(a.data))
+                          .map((entry, i) => {
+                            const campoLabel = entry.campo === "leasing" ? "Leasing" : entry.campo === "seguroValor" ? "Seguro" : entry.campo === "iuc" ? "IUC" : entry.campo;
+                            const colorCls = entry.campo === "leasing" ? "bg-indigo-100 text-indigo-700" : entry.campo === "seguroValor" ? "bg-purple-100 text-purple-700" : "bg-amber-100 text-amber-700";
+                            return (
+                              <tr key={entry._id || i} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{fmtDate(entry.data)}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${colorCls}`}>{campoLabel}</span>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-right text-gray-500">
+                                  {entry.valorAnterior != null ? `€${Number(entry.valorAnterior).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}` : "—"}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">
+                                  €{Number(entry.valorNovo).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -705,10 +857,13 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                           <button
                             type="button"
                             onClick={() => handleToggleArchive(att)}
-                            className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                            disabled={archivingId === att._id}
+                            className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-40"
                             title="Arquivar"
                           >
-                            <Archive className="w-4 h-4" />
+                            {archivingId === att._id
+                              ? <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                              : <Archive className="w-4 h-4" />}
                           </button>
                           <button
                             type="button"
@@ -813,10 +968,13 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                             <button
                               type="button"
                               onClick={() => handleToggleArchive(att)}
-                              className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              disabled={archivingId === att._id}
+                              className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-40"
                               title="Restaurar"
                             >
-                              <ArchiveRestore className="w-4 h-4" />
+                              {archivingId === att._id
+                                ? <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                                : <ArchiveRestore className="w-4 h-4" />}
                             </button>
                             <button
                               type="button"

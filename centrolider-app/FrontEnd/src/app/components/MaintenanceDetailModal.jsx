@@ -1,4 +1,5 @@
-import { X, Wrench, Calendar, Gauge, MapPin, Package, Euro, Plus, Paperclip, FileText, FileImage, File } from "lucide-react";
+import { X, Wrench, Calendar, Gauge, MapPin, Package, Euro, Plus, Paperclip, FileText, FileImage, File, Download } from "lucide-react";
+import { useState } from "react";
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("pt-PT") : "—");
 const fmtNum  = (n) => (n != null ? Number(n).toLocaleString("pt-PT") : "—");
@@ -17,7 +18,40 @@ function AttachIcon({ mimetype }) {
 }
 
 export function MaintenanceDetailModal({ isOpen, onClose, record, vehicle, attachments = [] }) {
+  const [downloadingId, setDownloadingId] = useState(null);
+
   if (!isOpen || !record) return null;
+
+  const handleDownload = async (att) => {
+    setDownloadingId(att._id);
+    try {
+      const base  = import.meta.env.VITE_API_BASE ?? '/api';
+      const token = localStorage.getItem('cl_token');
+      const res   = await fetch(`${base}/vehicles/${vehicle._id}/attachments/${att._id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Erro ao descarregar ficheiro');
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.target   = '_blank';
+      a.rel      = 'noreferrer';
+      const inline = blob.type.startsWith('image/') || blob.type === 'application/pdf';
+      if (!inline) a.download = att.originalName || att.filename || 'ficheiro';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const custoAdicional = record.custoAdicional || [];
   const totalExtras    = custoAdicional.reduce((s, c) => s + (c.valor || 0), 0);
@@ -101,16 +135,45 @@ export function MaintenanceDetailModal({ isOpen, onClose, record, vehicle, attac
                 <Package className="w-3.5 h-3.5" />
                 Materiais Utilizados
               </p>
-              <div className="flex flex-wrap gap-1.5">
-                {record.materiaisUsados.map((m, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-100 text-purple-700 text-sm font-medium rounded-full"
-                  >
-                    <Package className="w-3 h-3" />
-                    {matLabel(m)}
-                  </span>
-                ))}
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <div className="divide-y divide-gray-100">
+                  {record.materiaisUsados.map((m, i) => {
+                    const isObj = m && typeof m === "object";
+                    const nome  = isObj ? m.nome : m;
+                    const qty   = isObj && m.quantidade > 1 ? m.quantidade : 1;
+                    const preco = isObj ? (m.preco ?? null) : null;
+                    const total = preco != null ? preco * qty : null;
+                    return (
+                      <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Package className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+                          <span className="text-sm text-gray-800 truncate">{nome}</span>
+                          {qty > 1 && (
+                            <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full flex-shrink-0">
+                              x{qty}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-sm font-semibold text-gray-900 flex-shrink-0 ml-3">
+                          {total != null ? fmtEuro(total) : preco != null ? fmtEuro(preco) : "—"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {(() => {
+                    const matTotal = record.materiaisUsados.reduce((s, m) => {
+                      if (m && typeof m === "object" && m.preco != null)
+                        return s + m.preco * (m.quantidade || 1);
+                      return s;
+                    }, 0);
+                    return matTotal > 0 ? (
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-purple-50">
+                        <span className="text-sm font-bold text-purple-900">Total Materiais</span>
+                        <span className="text-sm font-bold text-purple-900">{fmtEuro(matTotal)}</span>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
               </div>
             </div>
           )}
@@ -169,6 +232,17 @@ export function MaintenanceDetailModal({ isOpen, onClose, record, vehicle, attac
                       {att.description && <p className="text-xs text-gray-500 truncate">{att.description}</p>}
                     </div>
                     {att.data && <span className="text-xs text-gray-400 flex-shrink-0">{fmtDate(att.data)}</span>}
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(att)}
+                      disabled={downloadingId === att._id}
+                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40 flex-shrink-0"
+                      title="Abrir ficheiro"
+                    >
+                      {downloadingId === att._id
+                        ? <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        : <Download className="w-3.5 h-3.5" />}
+                    </button>
                   </div>
                 ))}
               </div>

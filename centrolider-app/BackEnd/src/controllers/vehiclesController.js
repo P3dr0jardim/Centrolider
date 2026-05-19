@@ -75,6 +75,57 @@ exports.update = async (req, res) => {
   }
 };
 
+exports.bulkUpdateFinancial = async (req, res) => {
+  try {
+    const { updates } = req.body;
+    if (!Array.isArray(updates) || updates.length === 0)
+      return res.status(400).json({ message: 'updates array required' });
+
+    const now = new Date();
+    const results = await Promise.all(
+      updates.map(async ({ id, leasing, seguroValor, iuc }) => {
+        const current = await Vehicle.findById(id).select('leasing seguroValor iuc');
+        if (!current) return null;
+
+        const fields = { valoresFinanceirosEm: now };
+        const histEntries = [];
+
+        const check = (campo, incoming) => {
+          if (incoming === undefined) return;
+          fields[campo] = incoming;
+          if (incoming !== current[campo]) {
+            histEntries.push({ campo, valorAnterior: current[campo] ?? null, valorNovo: incoming, data: now });
+          }
+        };
+        check('leasing',     leasing);
+        check('seguroValor', seguroValor);
+        check('iuc',         iuc);
+
+        const update = { $set: fields };
+        if (histEntries.length > 0) update.$push = { historicoFinanceiro: { $each: histEntries } };
+
+        return Vehicle.findByIdAndUpdate(id, update, { new: true, runValidators: true });
+      })
+    );
+    res.json(results.filter(Boolean));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.bulkConfirmFinancial = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ message: 'ids array required' });
+
+    await Vehicle.updateMany({ _id: { $in: ids } }, { valoresFinanceirosEm: new Date() });
+    res.json({ confirmed: ids.length });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 exports.remove = async (req, res) => {
   try {
     const vehicle = await Vehicle.findByIdAndDelete(req.params.id);

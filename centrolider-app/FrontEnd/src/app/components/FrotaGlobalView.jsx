@@ -38,13 +38,13 @@ function getVehicleTyreSize(v) {
   );
 }
 
-export function FrotaGlobalView() {
+export function FrotaGlobalView({ initialStatusFilter = "todas" }) {
   const [fleets, setFleets] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch]             = useState("");
-  const [statusFilter, setStatusFilter] = useState("todas");
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
   const [modelFilter, setModelFilter]   = useState("");
   const [tyreFilter, setTyreFilter]     = useState("");
   const [selectedVehicle, setSelectedVehicle] = useState(null);

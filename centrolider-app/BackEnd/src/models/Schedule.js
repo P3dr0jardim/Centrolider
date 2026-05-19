@@ -11,7 +11,8 @@ const scheduleSchema = new mongoose.Schema({
   horaInicio: { type: String },
   dataFim: { type: Date },
   horaFim: { type: String },
-  notas: { type: String, trim: true },
+  notas:   { type: String, trim: true },
+  oficina: { type: String, trim: true },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Schedule', scheduleSchema);

@@ -219,7 +219,7 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
               className="px-5 py-2.5 text-gray-700 font-medium hover:bg-gray-200 rounded-lg transition-colors">
               Cancelar
             </button>
-            <button type="submit" disabled={saving}
+            <button type="submit" disabled={saving || isDuplicate}
               className="px-5 py-2.5 bg-blue-600 text-white font-medium hover:bg-blue-700 rounded-lg transition-colors shadow-sm disabled:opacity-50">
               {saving ? "A guardar…" : isEdit ? "Guardar Alterações" : "Adicionar"}
             </button>

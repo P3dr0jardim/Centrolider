@@ -38,6 +38,7 @@ export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSel
   const [notifications, setNotifications] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
+  const [loadingVehicleId, setLoadingVehicleId] = useState(null);
   const notifWrapRef = useRef(null);
 
   const menuItems = [
@@ -309,14 +310,28 @@ export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSel
                                 <button
                                   key={i}
                                   type="button"
-                                  onMouseDown={(e) => {
+                                  onMouseDown={async (e) => {
                                     e.preventDefault();
-                                    if (n.vehicleId && onVehicleSelect) {
+                                    if (!n.vehicleId || !onVehicleSelect) return;
+                                    const vid = String(n.vehicleId);
+                                    setLoadingVehicleId(vid);
+                                    try {
+                                      const vehicle = await api.getVehicle(vid);
                                       setNotifOpen(false);
-                                      onVehicleSelect({ _id: n.vehicleId, matricula: n.matricula, modelo: n.modelo });
+                                      onVehicleSelect(vehicle);
+                                    } catch {
+                                      // ignore
+                                    } finally {
+                                      setLoadingVehicleId(null);
                                     }
                                   }}
-                                  className={`w-full flex items-start gap-3 px-4 py-3 border-b border-gray-50 text-left transition-colors ${n.vehicleId ? "hover:bg-blue-50 cursor-pointer" : "cursor-default"}`}
+                                  className={`w-full flex items-start gap-3 px-4 py-3 border-b border-gray-50 text-left transition-colors ${
+                                    n.vehicleId
+                                      ? loadingVehicleId === String(n.vehicleId)
+                                        ? "bg-blue-50 cursor-wait"
+                                        : "hover:bg-blue-50 cursor-pointer"
+                                      : "cursor-default"
+                                  }`}
                                 >
                                   <div className={`mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${rowBg}`}>
                                     <RowIcon className={`w-3.5 h-3.5 ${rowColor}`} />
@@ -342,7 +357,9 @@ export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSel
                                       </p>
                                     )}
                                   </div>
-                                  <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${SEVERITY_DOT[n.severity] || "bg-gray-400"}`} />
+                                  {loadingVehicleId === String(n.vehicleId)
+                                    ? <div className="mt-1 w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                                    : <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${SEVERITY_DOT[n.severity] || "bg-gray-400"}`} />}
                                 </button>
                               );
                             })}

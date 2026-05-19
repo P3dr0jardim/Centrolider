@@ -1,6 +1,6 @@
 import {
   ChevronLeft, ChevronRight, Plus,
-  AlertTriangle, Calendar, Shield, Clock, FileText,
+  AlertTriangle, Calendar, Shield, Clock, FileText, Filter,
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { api } from "../../services/api";
@@ -32,6 +32,7 @@ export function AgendaView() {
   const [loading, setLoading] = useState(true);
   const [dayModal, setDayModal] = useState(null);     // 'YYYY-MM-DD' | null
   const [scheduleModal, setScheduleModal] = useState(null); // null | { date?, schedule?, prefill? }
+  const [oficinaFilter, setOficinaFilter] = useState("");
 
   const TODAY = useMemo(() => {
     const d = new Date();
@@ -63,6 +64,19 @@ export function AgendaView() {
       .finally(() => setLoading(false));
   }, [currentDate]);
 
+  const availableOficinas = useMemo(() => {
+    const set = new Set();
+    for (const s of schedules) {
+      if (s.oficina) set.add(s.oficina);
+    }
+    return Array.from(set).sort();
+  }, [schedules]);
+
+  const filteredSchedules = useMemo(() => {
+    if (!oficinaFilter) return schedules;
+    return schedules.filter((s) => s.oficina === oficinaFilter);
+  }, [schedules, oficinaFilter]);
+
   // Auto-events derived from vehicle expiry fields
   const autoEvents = useMemo(() => {
     const evs = [];
@@ -80,14 +94,16 @@ export function AgendaView() {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
-    for (const ev of autoEvents) {
-      if (ev.date.getFullYear() === year && ev.date.getMonth() === month) {
-        const key = toDateKey(ev.date);
-        if (!map[key]) map[key] = [];
-        map[key].push(ev);
+    if (!oficinaFilter) {
+      for (const ev of autoEvents) {
+        if (ev.date.getFullYear() === year && ev.date.getMonth() === month) {
+          const key = toDateKey(ev.date);
+          if (!map[key]) map[key] = [];
+          map[key].push(ev);
+        }
       }
     }
-    for (const s of schedules) {
+    for (const s of filteredSchedules) {
       const start = new Date(s.dataInicio);
       start.setHours(0, 0, 0, 0);
       const end = s.dataFim ? new Date(s.dataFim) : new Date(s.dataInicio);
@@ -106,7 +122,7 @@ export function AgendaView() {
       }
     }
     return map;
-  }, [autoEvents, schedules, currentDate]);
+  }, [autoEvents, filteredSchedules, currentDate, oficinaFilter]);
 
   // Sidebar alerts: expiring within 30 days, or overdue
   const alerts = useMemo(() => {
@@ -216,12 +232,33 @@ export function AgendaView() {
                   <ChevronRight className="w-5 h-5 text-gray-600" />
                 </button>
               </div>
-              <button
-                onClick={() => setCurrentDate(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1))}
-                className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors"
-              >
-                Hoje
-              </button>
+              <div className="flex items-center gap-2">
+                {availableOficinas.length > 0 && (
+                  <div className="relative flex items-center gap-1.5">
+                    <Filter className={`w-4 h-4 flex-shrink-0 ${oficinaFilter ? "text-blue-600" : "text-gray-400"}`} />
+                    <select
+                      value={oficinaFilter}
+                      onChange={(e) => setOficinaFilter(e.target.value)}
+                      className={`text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 pr-7 ${
+                        oficinaFilter
+                          ? "border-blue-400 bg-blue-50 text-blue-700 font-medium"
+                          : "border-gray-300 bg-white text-gray-700"
+                      }`}
+                    >
+                      <option value="">Todas as oficinas</option>
+                      {availableOficinas.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <button
+                  onClick={() => setCurrentDate(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1))}
+                  className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors"
+                >
+                  Hoje
+                </button>
+              </div>
             </div>
           </div>
 

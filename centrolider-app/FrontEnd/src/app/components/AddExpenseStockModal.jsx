@@ -1,8 +1,24 @@
 import { X, Search, Plus, Minus, PackagePlus, AlertTriangle, Paperclip } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { api } from "../../services/api";
 
 const MAINTENANCE_TYPES = ["manutencao", "reparacao"];
+
+const OFICINAS = [
+  "Autocrescente Ribeira Brava",
+  "Autocrescente Canhas",
+  "Maturifuel",
+  "Eurorepar",
+  "Opel",
+  "Peugeot",
+  "Mendes e Gomes",
+  "CSantos",
+  "CIAM",
+  "Autozarco",
+  "Vulcanizadora 25 abril",
+  "Autobraga",
+  "Extrapneu",
+];
 
 const CATEGORIAS = [
   { value: "pneus",    label: "Pneus" },
@@ -57,9 +73,23 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
   // Document attachment (maintenance types only)
   const [attachmentFile, setAttachmentFile] = useState(null);
 
+  // Oficina combobox
+  const [oficina, setOficina]               = useState("");
+  const [showOficinaSugg, setShowOficinaSugg] = useState(false);
+  const oficinaSuggRef                      = useRef(null);
+
   // Tyre-size mismatch warning: { item, vehicleSize, itemSize }
   const [tyreMismatch, setTyreMismatch] = useState(null);
   const [stockWarning, setStockWarning] = useState(null); // { nome, available }
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (oficinaSuggRef.current && !oficinaSuggRef.current.contains(e.target))
+        setShowOficinaSugg(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -119,6 +149,7 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
     setSaving(false); setError(null); setTyreMismatch(null); setStockWarning(null);
     setShowCustomForm(false); setCustomNome(""); setCustomCategoria("outros"); setCustomQty(1);
     setMarkMaint(true); setExtraCosts([]); setAttachmentFile(null);
+    setOficina(""); setShowOficinaSugg(false);
     onClose();
   };
 
@@ -132,7 +163,7 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
       data: fd.get("data"),
       descricao: fd.get("descricao") || undefined,
       kms: fd.get("kms") || undefined,
-      oficina: fd.get("oficina") || undefined,
+      oficina: oficina || undefined,
       materiaisUsados: [...selectedItems, ...customItems].map((i) => ({
         nome: i.nome,
         quantidade: i.quantidade,
@@ -141,18 +172,12 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
         .filter((c) => c.descricao || parseFloat(c.valor) > 0)
         .map((c) => ({ descricao: c.descricao, valor: parseFloat(c.valor) || 0 })),
       ...(markMaintToggle ? { markAsManutencao: markMaint } : {}),
+      attachmentFile: attachmentFile || undefined,
     };
     setSaving(true);
     setError(null);
     try {
-      const result = await onSave(data);
-      if (attachmentFile && result?.vehicleId && result?.maintenanceRecordId) {
-        const attachFd = new FormData();
-        attachFd.append("file", attachmentFile);
-        attachFd.append("manutencaoId", String(result.maintenanceRecordId));
-        attachFd.append("data", data.data);
-        await api.addAttachment(result.vehicleId, attachFd);
-      }
+      await onSave(data);
       handleClose();
     } catch (err) {
       setError(err.message);
@@ -288,16 +313,43 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
             </div>
 
             {isMaintenance && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">KMs no momento</label>
                   <input type="number" name="kms" placeholder="Ex: 85000" min="0"
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Oficina</label>
-                  <input type="text" name="oficina" placeholder="Nome da oficina"
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" />
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Oficina *</label>
+                  <div className="relative" ref={oficinaSuggRef}>
+                    <input
+                      type="text"
+                      value={oficina}
+                      onChange={(e) => { setOficina(e.target.value); setShowOficinaSugg(true); }}
+                      onFocus={() => setShowOficinaSugg(true)}
+                      required
+                      placeholder="Selecionar ou digitar oficina"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                    {showOficinaSugg && (() => {
+                      const suggs = OFICINAS.filter(
+                        (o) => o.toLowerCase().includes(oficina.toLowerCase()) && o.toLowerCase() !== oficina.toLowerCase()
+                      );
+                      return suggs.length > 0 ? (
+                        <div className="absolute z-20 top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                          <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
+                            {suggs.map((o) => (
+                              <button key={o} type="button"
+                                onClick={() => { setOficina(o); setShowOficinaSugg(false); }}
+                                className="w-full px-4 py-2.5 text-sm text-left text-gray-800 hover:bg-red-50 transition-colors">
+                                {o}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
                 </div>
               </div>
             )}

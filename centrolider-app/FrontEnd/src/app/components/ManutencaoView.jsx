@@ -168,11 +168,18 @@ export function ManutencaoView() {
         })),
       }).catch(console.error);
     }
+    if (data.attachmentFile && maintenanceRecordId) {
+      const attachFd = new FormData();
+      attachFd.append("file", data.attachmentFile);
+      attachFd.append("manutencaoId", String(maintenanceRecordId));
+      attachFd.append("data", data.data);
+      const updatedWithAtt = await api.addAttachment(vehicle._id, attachFd);
+      updateVehicle(updatedWithAtt);
+    }
     if (data.markAsManutencao && vehicle.status !== "Manutenção") {
       const v2 = await api.updateVehicle(vehicle._id, { status: "Manutenção" });
       updateVehicle(v2);
     }
-    return { vehicleId: vehicle._id, maintenanceRecordId };
   };
 
   // Called from inline edit modal

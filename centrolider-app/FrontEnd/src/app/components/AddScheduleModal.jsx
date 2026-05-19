@@ -11,6 +11,23 @@ const TIPOS = [
   { value: "outro",      label: "Outro" },
 ];
 
+const OFICINAS = [
+  "Autocrescente Ribeira Brava",
+  "Autocrescente Canhas",
+  "Eurorepar",
+  "Opel",
+  "Peugeot",
+  "Mendes e Gomes",
+  "CSantos",
+  "CIAM",
+  "Autozarco",
+  "Vulcanizadora 25 abril",
+  "Autobraga",
+  "Extrapneu",
+];
+
+const TIPOS_COM_OFICINA = ["inspecao", "revisao", "reparacao", "manutencao"];
+
 const STATUS_DOT = {
   Operacional: "bg-green-500",
   Manutenção:  "bg-orange-500",
@@ -33,10 +50,13 @@ export function AddScheduleModal({
   const [dataFim, setDataFim]           = useState("");
   const [horaFim, setHoraFim]           = useState("17:00");
   const [notas, setNotas]               = useState("");
+  const [oficina, setOficina]           = useState("");
+  const [showOficinaSugg, setShowOficinaSugg] = useState(false);
   const [saving, setSaving]             = useState(false);
   const [error, setError]               = useState(null);
 
-  const dropRef = useRef(null);
+  const dropRef      = useRef(null);
+  const oficinaSuggRef = useRef(null);
   const isEdit  = !!schedule;
 
   useEffect(() => {
@@ -51,6 +71,7 @@ export function AddScheduleModal({
       setDataFim(schedule.dataFim ? schedule.dataFim.slice(0, 10) : "");
       setHoraFim(schedule.horaFim || "17:00");
       setNotas(schedule.notas || "");
+      setOficina(schedule.oficina || "");
     } else {
       const today = new Date().toISOString().slice(0, 10);
       setViaturaId(prefill?.viaturaId || "");
@@ -60,14 +81,25 @@ export function AddScheduleModal({
       setDataFim(selectedDate || today);
       setHoraFim("17:00");
       setNotas("");
+      setOficina("");
     }
-    setVehicleSearch(""); setDropOpen(false);
+    setVehicleSearch(""); setDropOpen(false); setShowOficinaSugg(false);
   }, [isOpen, schedule, selectedDate, prefill]);
 
-  // Close dropdown on outside click
+  // Close vehicle dropdown on outside click
   useEffect(() => {
     const handler = (e) => {
       if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Close oficina dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (oficinaSuggRef.current && !oficinaSuggRef.current.contains(e.target))
+        setShowOficinaSugg(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -93,12 +125,25 @@ export function AddScheduleModal({
 
   if (!isOpen) return null;
 
+  const needsOficina = TIPOS_COM_OFICINA.includes(tipoEvento);
+
+  const oficinaSuggestions = OFICINAS.filter(
+    (o) =>
+      o.toLowerCase().includes(oficina.toLowerCase()) &&
+      o.toLowerCase() !== oficina.toLowerCase()
+  );
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!viaturaId) { setError("Selecione uma viatura."); return; }
+    if (needsOficina && !oficina.trim()) { setError("Selecione ou introduza a oficina."); return; }
     setSaving(true); setError(null);
     try {
-      await onSave({ viaturaId, tipoEvento, dataInicio, horaInicio, dataFim: dataFim || dataInicio, horaFim, notas });
+      await onSave({
+        viaturaId, tipoEvento, dataInicio, horaInicio,
+        dataFim: dataFim || dataInicio, horaFim, notas,
+        oficina: oficina.trim() || undefined,
+      });
     } catch (err) {
       setError(err.message);
       setSaving(false);
@@ -255,11 +300,44 @@ export function AddScheduleModal({
               </div>
             </div>
 
+            {/* Oficina */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Oficina {needsOficina ? "*" : "(opcional)"}
+              </label>
+              <div className="relative" ref={oficinaSuggRef}>
+                <input
+                  type="text"
+                  value={oficina}
+                  onChange={(e) => { setOficina(e.target.value); setShowOficinaSugg(true); }}
+                  onFocus={() => setShowOficinaSugg(true)}
+                  placeholder="Selecionar ou digitar oficina"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {showOficinaSugg && oficinaSuggestions.length > 0 && (
+                  <div className="absolute z-20 top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                    <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
+                      {oficinaSuggestions.map((o) => (
+                        <button
+                          key={o}
+                          type="button"
+                          onClick={() => { setOficina(o); setShowOficinaSugg(false); }}
+                          className="w-full px-4 py-2.5 text-sm text-left text-gray-800 hover:bg-blue-50 transition-colors"
+                        >
+                          {o}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Notas */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Notas / Observações</label>
               <textarea value={notas} onChange={(e) => setNotas(e.target.value)}
-                placeholder="Descrição adicional, endereço da oficina, contacto, etc."
+                placeholder="Descrição adicional, contacto, etc."
                 rows={3}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             </div>

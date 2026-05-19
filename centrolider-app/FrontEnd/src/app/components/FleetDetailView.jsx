@@ -13,6 +13,9 @@ import {
   Phone,
   Mail,
   User,
+  AlertCircle,
+  Wrench,
+  Clock,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { AddVehicleModal } from "./AddVehicleModal";
@@ -43,6 +46,7 @@ export function FleetDetailView({ fleet, onBack }) {
   // Row-action modals — keyed by target vehicle
   const [actionVehicle, setActionVehicle] = useState(null);
   const [activeAction, setActiveAction] = useState(null); // 'edit' | 'expense' | 'revenue' | 'attachment' | null
+  const [notifications, setNotifications] = useState([]);
 
   const openAction = (vehicle, action) => {
     setActionVehicle(vehicle);
@@ -60,6 +64,17 @@ export function FleetDetailView({ fleet, onBack }) {
       .then(setVehicles)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+  }, [fleet?._id]);
+
+  useEffect(() => {
+    if (!fleet?._id) return;
+    api.getNotifications()
+      .then(({ notifications: all }) => {
+        setNotifications(
+          (all || []).filter((n) => n.frotaId && String(n.frotaId) === String(fleet._id))
+        );
+      })
+      .catch(() => {});
   }, [fleet?._id]);
 
   const handleVehicleUpdated = (updated) => {
@@ -382,8 +397,45 @@ export function FleetDetailView({ fleet, onBack }) {
                     {vehicles.filter((v) => v.status === "Inativo").length}
                   </span>
                 </div>
+                {fleet?.orcamentoPneus != null && (
+                  <>
+                    <div className="my-2 border-t border-gray-100" />
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Orçamento Pneus</span>
+                      <span className="font-semibold text-gray-900">{fleet.orcamentoPneus} un.</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
+
+            {notifications.length > 0 && (
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500" />
+                  Alertas ({notifications.length})
+                </h4>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {notifications.map((n, i) => (
+                    <div
+                      key={i}
+                      className={`p-2.5 rounded-lg text-xs flex items-start gap-2 ${
+                        n.severity === "high"
+                          ? "bg-red-50 border border-red-100 text-red-700"
+                          : n.type === "upcoming"
+                          ? "bg-blue-50 border border-blue-100 text-blue-700"
+                          : "bg-orange-50 border border-orange-100 text-orange-700"
+                      }`}
+                    >
+                      {n.type === "upcoming"
+                        ? <Clock className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        : <Wrench className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />}
+                      <span className="leading-relaxed">{n.message}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

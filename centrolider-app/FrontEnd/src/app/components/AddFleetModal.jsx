@@ -16,9 +16,11 @@ export function AddFleetModal({ isOpen, onClose, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const pneus = fd.get("orcamentoPneus");
     const data = {
-      name:        fd.get("name").trim(),
-      description: fd.get("description").trim() || undefined,
+      name:           fd.get("name").trim(),
+      description:    fd.get("description").trim() || undefined,
+      orcamentoPneus: pneus ? Number(pneus) : undefined,
     };
     setSaving(true);
     setError(null);
@@ -65,6 +67,21 @@ export function AddFleetModal({ isOpen, onClose, onSave }) {
                 rows={3}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Orçamento de Pneus <span className="text-gray-400 font-normal">(opcional)</span>
+              </label>
+              <input
+                type="number"
+                name="orcamentoPneus"
+                placeholder="Ex: 100"
+                min="0"
+                step="1"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-400 mt-1">Número total de pneus incluídos no contrato desta frota.</p>
             </div>
           </div>
 
