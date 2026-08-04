@@ -9,6 +9,7 @@ import { ConfiguracoesView } from "./components/ConfiguracoesView";
 import { AtividadeView } from "./components/AtividadeView";
 import { ManutencaoView } from "./components/ManutencaoView";
 import { VehicleDetailView } from "./components/VehicleDetailView";
+import { UsersView } from "./components/UsersView";
 import { Login } from "./components/Login";
 import { useAuth } from "./context/AuthContext";
 
@@ -55,6 +56,7 @@ export default function App() {
       case "stock":          return <StockView />;
       case "configuracoes":  return <ConfiguracoesView />;
       case "atividade":      return <AtividadeView />;
+      case "utilizadores":   return user.role === "admin" ? <UsersView /> : <FrotasView onNavigate={navigate} onVehicleSelect={setGlobalVehicle} />;
       default:               return <FrotasView onNavigate={navigate} onVehicleSelect={setGlobalVehicle} />;
     }
   };

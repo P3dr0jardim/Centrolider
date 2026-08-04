@@ -37,6 +37,7 @@ import { EditExpenseModal } from "./EditExpenseModal";
 import { EditMaintenanceModal } from "./EditMaintenanceModal";
 import { MaintenanceDetailModal } from "./MaintenanceDetailModal";
 import { api } from "../../services/api";
+import { openAttachment } from "../utils/openAttachment";
 
 const fmtDate = (d) => {
   if (!d) return "—";
@@ -100,28 +101,7 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
   const handleDownloadAttachment = useCallback(async (att) => {
     setDownloadingId(att._id);
     try {
-      const base  = import.meta.env.VITE_API_BASE ?? '/api';
-      const token = localStorage.getItem('cl_token');
-      const res   = await fetch(`${base}/vehicles/${vehicleData._id}/attachments/${att._id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || 'Erro ao descarregar ficheiro');
-      }
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.target   = '_blank';
-      a.rel      = 'noreferrer';
-      // Prefer inline view for PDFs/images; force download otherwise
-      const inline = blob.type.startsWith('image/') || blob.type === 'application/pdf';
-      if (!inline) a.download = att.originalName || att.filename || 'ficheiro';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      await openAttachment(vehicleData._id, att);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -183,10 +163,10 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
       }).catch(console.error);
     }
 
-    if (data.attachmentFile && maintenanceRecordId) {
+    if (data.attachmentFile) {
       const attachFd = new FormData();
       attachFd.append("file", data.attachmentFile);
-      attachFd.append("manutencaoId", String(maintenanceRecordId));
+      if (maintenanceRecordId) attachFd.append("manutencaoId", String(maintenanceRecordId));
       attachFd.append("data", data.data);
       const updatedWithAtt = await api.addAttachment(currentVehicle._id, attachFd);
       setVehicleData(updatedWithAtt);

@@ -63,6 +63,7 @@ export function AddRevenueModal({ isOpen, onClose, onSave, vehicleId }) {
                 <option value="">Selecione o tipo</option>
                 <option value="servico">Serviço de Transporte</option>
                 <option value="aluguer">Aluguer</option>
+                <option value="renda">Renda</option>
                 <option value="entrega">Entrega</option>
                 <option value="bonus">Bónus</option>
                 <option value="outro">Outro</option>

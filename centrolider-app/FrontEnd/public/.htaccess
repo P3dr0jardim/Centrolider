@@ -1,6 +1,10 @@
 Options -MultiViews
 RewriteEngine On
 RewriteBase /centrolider/
+
+RewriteCond %{REQUEST_URI} ^/centrolider/api/ [NC]
+RewriteRule ^ - [L]
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.html [QSA,L]
 

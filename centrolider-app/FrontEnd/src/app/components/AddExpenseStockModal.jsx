@@ -165,7 +165,10 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
       kms: fd.get("kms") || undefined,
       oficina: oficina || undefined,
       materiaisUsados: [...selectedItems, ...customItems].map((i) => ({
+        _id: i._id,
+        _isCustom: i._isCustom,
         nome: i.nome,
+        categoria: i.categoria,
         quantidade: i.quantidade,
       })),
       custoAdicional: extraCosts
@@ -360,27 +363,25 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 resize-none" />
             </div>
 
-            {/* ── Document attachment (maintenance only) ──────────────────── */}
-            {isMaintenance && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Documento Anexo (opcional)</label>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors flex-1 min-w-0">
-                    <Paperclip className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    <span className="text-sm text-gray-500 truncate">
-                      {attachmentFile ? attachmentFile.name : "Selecionar ficheiro…"}
-                    </span>
-                    <input type="file" className="hidden" onChange={(e) => setAttachmentFile(e.target.files[0] || null)} />
-                  </label>
-                  {attachmentFile && (
-                    <button type="button" onClick={() => setAttachmentFile(null)}
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
+            {/* ── Document attachment (always available, optional) ────────── */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Documento Anexo (opcional)</label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors flex-1 min-w-0">
+                  <Paperclip className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <span className="text-sm text-gray-500 truncate">
+                    {attachmentFile ? attachmentFile.name : "Selecionar ficheiro…"}
+                  </span>
+                  <input type="file" className="hidden" onChange={(e) => setAttachmentFile(e.target.files[0] || null)} />
+                </label>
+                {attachmentFile && (
+                  <button type="button" onClick={() => setAttachmentFile(null)}
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-            )}
+            </div>
 
             {/* ── Materials section (maintenance only) ───────────────────── */}
             {isMaintenance && (

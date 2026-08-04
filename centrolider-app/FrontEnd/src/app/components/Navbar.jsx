@@ -1,4 +1,4 @@
-import { Bell, Search, Settings, Menu, Truck, BarChart2, Package, Car, CalendarDays, LogOut, Activity, Wrench, X, AlertTriangle, Clock, CalendarClock } from "lucide-react";
+import { Bell, Search, Settings, Menu, Truck, BarChart2, Package, Car, CalendarDays, LogOut, Activity, Wrench, X, AlertTriangle, Clock, CalendarClock, Users } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { CentroliderLogo } from "./CentroliderLogo";
@@ -49,6 +49,7 @@ export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSel
     { id: "rentabilidade", label: "Rentabilidade", icon: BarChart2 },
     { id: "stock",         label: "Stock",         icon: Package },
     { id: "atividade",     label: "Atividade",     icon: Activity },
+    ...(user?.role === "admin" ? [{ id: "utilizadores", label: "Utilizadores", icon: Users }] : []),
   ];
 
   // Close search dropdown when clicking outside
@@ -153,20 +154,20 @@ export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSel
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
-          <div className="flex items-center">
+          <div className="flex items-center min-w-0 flex-1">
             <div className="flex-shrink-0 flex items-center">
               <CentroliderLogo size="sm" />
             </div>
 
-            {/* Desktop Menu */}
-            <div className="hidden md:ml-10 md:flex md:space-x-8">
+            {/* Desktop Menu — scrolls horizontally instead of pushing the right-side controls off-screen */}
+            <div className="hidden md:flex md:ml-4 lg:ml-8 md:space-x-1 lg:space-x-4 xl:space-x-6 overflow-x-auto flex-1 min-w-0 [scrollbar-width:thin]">
               {menuItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => onMenuChange(item.id)}
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200 ${
+                  className={`inline-flex items-center flex-shrink-0 px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200 ${
                     activeMenu === item.id
                       ? "border-blue-500 text-gray-900"
                       : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
@@ -179,9 +180,9 @@ export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSel
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 lg:gap-4 flex-shrink-0 ml-2">
             {/* Search */}
-            <div ref={searchWrapRef} className="hidden md:block relative">
+            <div ref={searchWrapRef} className="hidden lg:block relative">
               <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${searching ? "text-blue-400 animate-pulse" : "text-gray-400"}`} />
               <input
                 type="text"
@@ -190,7 +191,7 @@ export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSel
                 onFocus={() => results.length > 0 && setSearchOpen(true)}
                 onKeyDown={(e) => e.key === "Escape" && clearSearch()}
                 placeholder="Pesquisar viatura…"
-                className="pl-10 pr-8 py-1.5 border border-gray-200 rounded-lg w-52 lg:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                className="pl-10 pr-8 py-1.5 border border-gray-200 rounded-lg w-44 xl:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
               />
               {query && (
                 <button

@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 
 const stockItemSchema = new mongoose.Schema({
+  // Fleet(s) this stock item belongs to. Items shared between fleets (e.g. Why Not Car Rental / 7M Rent a Car) list both.
+  frotaIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Fleet' }],
   categoria: {
     type: String,
     enum: ['pneus', 'filtros', 'oleo', 'travoes', 'baterias', 'lampadas', 'outros'],

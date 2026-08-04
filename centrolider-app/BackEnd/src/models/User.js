@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ['accounting', 'manager', 'admin'], required: true },
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, trim: true, lowercase: true },
+  // Fleets this user is restricted to. Empty/undefined = unrestricted (sees every fleet).
+  allowedFleets: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Fleet' }],
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

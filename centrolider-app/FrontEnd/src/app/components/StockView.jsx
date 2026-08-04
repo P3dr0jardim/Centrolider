@@ -27,6 +27,7 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("pt-PT") : "—");
 
 export function StockView() {
   const [stockItems, setStockItems] = useState([]);
+  const [fleets, setFleets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [mainTab, setMainTab] = useState("inventario");   // "inventario" | "historico"
@@ -39,10 +40,15 @@ export function StockView() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState(null); // null = create, item = edit
 
+  const fleetName = useMemo(() => {
+    const map = Object.fromEntries(fleets.map((f) => [String(f._id), f.name]));
+    return (id) => map[String(id)] || "—";
+  }, [fleets]);
+
   const load = () => {
     setLoading(true);
-    api.getStock()
-      .then(setStockItems)
+    Promise.all([api.getStock(), api.getFleets()])
+      .then(([items, fleetList]) => { setStockItems(items); setFleets(fleetList); })
       .catch(console.error)
       .finally(() => setLoading(false));
   };
@@ -264,6 +270,7 @@ export function StockView() {
                   <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     <th className="px-6 py-3 text-left">Categoria</th>
                     <th className="px-6 py-3 text-left">Nome</th>
+                    <th className="px-6 py-3 text-left">Frota</th>
                     <th className="px-6 py-3 text-center">Qtd</th>
                     <th className="px-6 py-3 text-center">Mínimo</th>
                     <th className="px-6 py-3 text-left">Fornecedor</th>
@@ -275,7 +282,7 @@ export function StockView() {
                 <tbody className="divide-y divide-gray-100">
                   {filteredItems.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-6 py-12 text-center text-gray-400 text-sm">
+                      <td colSpan={9} className="px-6 py-12 text-center text-gray-400 text-sm">
                         Nenhum item encontrado.
                       </td>
                     </tr>
@@ -291,6 +298,9 @@ export function StockView() {
                           </span>
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-800">{item.nome}</td>
+                        <td className="px-6 py-3 text-xs text-gray-500">
+                          {(item.frotaIds || []).map((id) => fleetName(id)).join(", ") || "—"}
+                        </td>
                         <td className="px-6 py-3 text-center">
                           <span className={`text-sm font-semibold ${isLow ? "text-red-600" : "text-gray-900"}`}>
                             {item.quantidade}
@@ -450,6 +460,7 @@ export function StockView() {
         onSave={handleSave}
         item={editItem}
         existingItems={stockItems}
+        fleets={fleets}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 import { X, Wrench, Calendar, Gauge, MapPin, Package, Euro, Plus, Paperclip, FileText, FileImage, File, Download } from "lucide-react";
 import { useState } from "react";
+import { openAttachment } from "../utils/openAttachment";
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("pt-PT") : "—");
 const fmtNum  = (n) => (n != null ? Number(n).toLocaleString("pt-PT") : "—");
@@ -25,27 +26,7 @@ export function MaintenanceDetailModal({ isOpen, onClose, record, vehicle, attac
   const handleDownload = async (att) => {
     setDownloadingId(att._id);
     try {
-      const base  = import.meta.env.VITE_API_BASE ?? '/api';
-      const token = localStorage.getItem('cl_token');
-      const res   = await fetch(`${base}/vehicles/${vehicle._id}/attachments/${att._id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || 'Erro ao descarregar ficheiro');
-      }
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.target   = '_blank';
-      a.rel      = 'noreferrer';
-      const inline = blob.type.startsWith('image/') || blob.type === 'application/pdf';
-      if (!inline) a.download = att.originalName || att.filename || 'ficheiro';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      await openAttachment(vehicle._id, att);
     } catch (err) {
       alert(err.message);
     } finally {

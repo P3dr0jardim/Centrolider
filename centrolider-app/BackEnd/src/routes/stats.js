@@ -5,12 +5,13 @@ const Expense = require('../models/Expense');
 const Revenue = require('../models/Revenue');
 const auth = require('../middleware/auth');
 const { syncVehicleStatuses } = require('../utils/syncStatus');
+const { fleetFilter } = require('../utils/fleetScope');
 
 router.use(auth);
 
 router.get('/rentabilidade', async (req, res) => {
   try {
-    const fleets = await Fleet.find({});
+    const fleets = await Fleet.find(fleetFilter(req.user));
 
     const results = await Promise.all(fleets.map(async (fleet) => {
       const vehicles = await Vehicle.find({ frotaId: fleet._id }).select('_id status rentabilidade');

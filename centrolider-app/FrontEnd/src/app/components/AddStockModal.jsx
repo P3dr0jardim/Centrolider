@@ -11,13 +11,14 @@ const CATEGORIAS = [
   { value: "outros",   label: "Outros" },
 ];
 
-export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [] }) {
+export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [], fleets = [] }) {
   const [categoria, setCategoria] = useState("");
   const [nome, setNome]           = useState("");
   const [quantidade, setQuantidade] = useState("");
   const [minimo, setMinimo]       = useState("");
   const [fornecedor, setFornecedor] = useState("");
   const [preco, setPreco]         = useState("");
+  const [frotaIds, setFrotaIds]   = useState([]);
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState(null);
   const [showSugg, setShowSugg]   = useState(false);
@@ -35,11 +36,19 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
       setMinimo(item.minimo ?? "");
       setFornecedor(item.fornecedor || "");
       setPreco(item.preco ?? "");
+      setFrotaIds((item.frotaIds || []).map(String));
     } else {
       setCategoria(""); setNome(""); setQuantidade(""); setMinimo("");
       setFornecedor(""); setPreco("");
+      setFrotaIds(fleets.length === 1 ? [String(fleets[0]._id)] : []);
     }
-  }, [isOpen, item]);
+  }, [isOpen, item, fleets]);
+
+  const toggleFrota = (id) => {
+    setFrotaIds((prev) =>
+      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
+    );
+  };
 
   // Close suggestion dropdown on outside click
   useEffect(() => {
@@ -72,6 +81,10 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (frotaIds.length === 0) {
+      setError("Selecione pelo menos uma frota.");
+      return;
+    }
     setSaving(true); setError(null);
     try {
       await onSave({
@@ -81,6 +94,7 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
         minimo:     Number(minimo),
         fornecedor: fornecedor || undefined,
         preco:      preco !== "" ? Number(preco) : undefined,
+        frotaIds,
       });
     } catch (err) {
       setError(err.message);
@@ -125,6 +139,35 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Frota{fleets.length > 1 ? "s" : ""} * {fleets.length > 1 && <span className="font-normal text-gray-400">(selecione uma ou mais — item partilhado entre as selecionadas)</span>}
+              </label>
+              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 border border-gray-200 rounded-lg">
+                {fleets.length === 0 && (
+                  <span className="text-sm text-gray-400">Sem frotas disponíveis</span>
+                )}
+                {fleets.map((f) => {
+                  const id = String(f._id);
+                  const active = frotaIds.includes(id);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => toggleFrota(id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        active
+                          ? "bg-blue-600 border-blue-600 text-white"
+                          : "bg-white border-gray-300 text-gray-600 hover:border-blue-400"
+                      }`}
+                    >
+                      {f.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Nome — with suggestions */}

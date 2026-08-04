@@ -114,4 +114,10 @@ export const api = {
 
   // Notifications
   getNotifications: () => request('GET', '/notifications'),
+
+  // Users
+  getUsers: () => request('GET', '/users'),
+  createUser: (data) => request('POST', '/users', data),
+  updateUser: (id, data) => request('PUT', `/users/${id}`, data),
+  deleteUser: (id) => request('DELETE', `/users/${id}`),
 };

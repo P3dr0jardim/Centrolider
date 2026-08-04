@@ -1,10 +1,11 @@
 const Fleet = require('../models/Fleet');
 const Vehicle = require('../models/Vehicle');
 const { logActivity } = require('../utils/logActivity');
+const { fleetFilter, isFleetAllowed } = require('../utils/fleetScope');
 
 exports.getAll = async (req, res) => {
   try {
-    const fleets = await Fleet.find().sort({ name: 1 });
+    const fleets = await Fleet.find(fleetFilter(req.user)).sort({ name: 1 });
     const withStats = await Promise.all(
       fleets.map(async (fleet) => {
         const vehicles = await Vehicle.find({ frotaId: fleet._id });
@@ -24,6 +25,7 @@ exports.getAll = async (req, res) => {
 
 exports.getOne = async (req, res) => {
   try {
+    if (!isFleetAllowed(req.user, req.params.id)) return res.status(403).json({ message: 'Access denied' });
     const fleet = await Fleet.findById(req.params.id);
     if (!fleet) return res.status(404).json({ message: 'Fleet not found' });
     res.json(fleet);
@@ -42,6 +44,7 @@ exports.create = async (req, res) => {
       descricao: `Criou a frota "${fleet.name}"`,
       referencia: fleet.name,
       referenciaId: fleet._id,
+      frotaIds: [fleet._id],
     });
     res.status(201).json(fleet);
   } catch (err) {
@@ -51,6 +54,7 @@ exports.create = async (req, res) => {
 
 exports.update = async (req, res) => {
   try {
+    if (!isFleetAllowed(req.user, req.params.id)) return res.status(403).json({ message: 'Access denied' });
     const fleet = await Fleet.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!fleet) return res.status(404).json({ message: 'Fleet not found' });
     logActivity({
@@ -60,6 +64,7 @@ exports.update = async (req, res) => {
       descricao: `Editou a frota "${fleet.name}"`,
       referencia: fleet.name,
       referenciaId: fleet._id,
+      frotaIds: [fleet._id],
     });
     res.json(fleet);
   } catch (err) {
@@ -69,6 +74,7 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
+    if (!isFleetAllowed(req.user, req.params.id)) return res.status(403).json({ message: 'Access denied' });
     const vehicleCount = await Vehicle.countDocuments({ frotaId: req.params.id });
     if (vehicleCount > 0) {
       return res.status(400).json({ message: 'Cannot delete fleet with assigned vehicles' });
@@ -81,6 +87,7 @@ exports.remove = async (req, res) => {
       entidade: 'Frota',
       descricao: `Eliminou a frota "${fleet.name}"`,
       referenciaId: fleet._id,
+      frotaIds: [fleet._id],
     });
     res.json({ message: 'Fleet deleted' });
   } catch (err) {

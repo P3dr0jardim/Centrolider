@@ -4,7 +4,7 @@ const revenueSchema = new mongoose.Schema({
   vehicleId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vehicle', required: true },
   tipo: {
     type: String,
-    enum: ['servico', 'aluguer', 'entrega', 'bonus', 'outro'],
+    enum: ['servico', 'aluguer', 'renda', 'entrega', 'bonus', 'outro'],
     required: true,
   },
   valor: { type: Number, required: true, min: 0 },

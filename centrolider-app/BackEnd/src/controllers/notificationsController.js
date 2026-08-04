@@ -1,6 +1,7 @@
 const Vehicle = require('../models/Vehicle');
 const Schedule = require('../models/Schedule');
 const StockItem = require('../models/StockItem');
+const { vehicleFleetFilter, isFleetAllowed } = require('../utils/fleetScope');
 
 const EVENT_LABELS = {
   inspecao:  'Inspeção',
@@ -19,7 +20,7 @@ exports.getNotifications = async (req, res) => {
     const notifications = [];
 
     // 1. Vehicles in maintenance — with how long they've been there
-    const maintenanceVehicles = await Vehicle.find({ status: 'Manutenção' })
+    const maintenanceVehicles = await Vehicle.find({ status: 'Manutenção', ...vehicleFleetFilter(req.user) })
       .select('matricula modelo manutencaoDesde historicoManutencao updatedAt frotaId');
 
     for (const v of maintenanceVehicles) {
@@ -57,6 +58,7 @@ exports.getNotifications = async (req, res) => {
 
     for (const s of upcomingSchedules) {
       if (!s.viaturaId) continue;
+      if (!isFleetAllowed(req.user, s.viaturaId.frotaId)) continue;
       const date = new Date(s.dataInicio);
       const dateStr = date.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' });
       const label = EVENT_LABELS[s.tipoEvento] || s.tipoEvento;

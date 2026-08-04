@@ -1,6 +1,6 @@
 const Log = require('../models/Log');
 
-async function logActivity({ user, acao, entidade, descricao, referencia, referenciaId }) {
+async function logActivity({ user, acao, entidade, descricao, referencia, referenciaId, frotaIds }) {
   try {
     await Log.create({
       userId:       user?._id,
@@ -10,6 +10,7 @@ async function logActivity({ user, acao, entidade, descricao, referencia, refere
       descricao,
       referencia:   referencia || undefined,
       referenciaId: referenciaId ? String(referenciaId) : undefined,
+      frotaIds:     (frotaIds || []).filter(Boolean),
     });
   } catch (e) {
     console.error('[logActivity]', e.message);

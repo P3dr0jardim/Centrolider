@@ -168,10 +168,10 @@ export function ManutencaoView() {
         })),
       }).catch(console.error);
     }
-    if (data.attachmentFile && maintenanceRecordId) {
+    if (data.attachmentFile) {
       const attachFd = new FormData();
       attachFd.append("file", data.attachmentFile);
-      attachFd.append("manutencaoId", String(maintenanceRecordId));
+      if (maintenanceRecordId) attachFd.append("manutencaoId", String(maintenanceRecordId));
       attachFd.append("data", data.data);
       const updatedWithAtt = await api.addAttachment(vehicle._id, attachFd);
       updateVehicle(updatedWithAtt);

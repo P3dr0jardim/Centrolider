@@ -1,6 +1,7 @@
 const Schedule = require('../models/Schedule');
 const { syncVehicleStatuses } = require('../utils/syncStatus');
 const { logActivity } = require('../utils/logActivity');
+const { allowedVehicleIds, isVehicleAllowed } = require('../utils/fleetScope');
 
 const TIPO_PT = {
   servico: 'Serviço', manutencao: 'Manutenção', inspecao: 'Inspeção',
@@ -10,7 +11,13 @@ const TIPO_PT = {
 exports.getAll = async (req, res) => {
   try {
     const filter = {};
-    if (req.query.viaturaId) filter.viaturaId = req.query.viaturaId;
+    if (req.query.viaturaId) {
+      if (!(await isVehicleAllowed(req.user, req.query.viaturaId))) return res.status(403).json({ message: 'Access denied' });
+      filter.viaturaId = req.query.viaturaId;
+    } else {
+      const allowed = await allowedVehicleIds(req.user);
+      if (allowed !== null) filter.viaturaId = { $in: allowed };
+    }
     if (req.query.tipoEvento) filter.tipoEvento = req.query.tipoEvento;
     if (req.query.from || req.query.to) {
       filter.dataInicio = {};
@@ -30,6 +37,7 @@ exports.getOne = async (req, res) => {
   try {
     const schedule = await Schedule.findById(req.params.id).populate('viaturaId', 'matricula modelo');
     if (!schedule) return res.status(404).json({ message: 'Schedule not found' });
+    if (!(await isVehicleAllowed(req.user, schedule.viaturaId?._id))) return res.status(403).json({ message: 'Access denied' });
     res.json(schedule);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -38,8 +46,9 @@ exports.getOne = async (req, res) => {
 
 exports.create = async (req, res) => {
   try {
+    if (!(await isVehicleAllowed(req.user, req.body.viaturaId))) return res.status(403).json({ message: 'Access denied' });
     const doc = await Schedule.create(req.body);
-    const schedule = await doc.populate('viaturaId', 'matricula modelo');
+    const schedule = await doc.populate('viaturaId', 'matricula modelo frotaId');
     const mat = schedule.viaturaId?.matricula || '—';
     const tipo = TIPO_PT[schedule.tipoEvento] || schedule.tipoEvento || 'Evento';
     logActivity({
@@ -49,6 +58,7 @@ exports.create = async (req, res) => {
       descricao: `Agendou ${tipo} para a viatura ${mat}`,
       referencia: mat,
       referenciaId: schedule._id,
+      frotaIds: [schedule.viaturaId?.frotaId],
     });
     syncVehicleStatuses().catch(console.error);
     res.status(201).json(schedule);
@@ -59,8 +69,13 @@ exports.create = async (req, res) => {
 
 exports.update = async (req, res) => {
   try {
+    const existing = await Schedule.findById(req.params.id).select('viaturaId');
+    if (!existing) return res.status(404).json({ message: 'Schedule not found' });
+    if (!(await isVehicleAllowed(req.user, existing.viaturaId))) return res.status(403).json({ message: 'Access denied' });
+    if (req.body.viaturaId && !(await isVehicleAllowed(req.user, req.body.viaturaId))) return res.status(403).json({ message: 'Access denied' });
+
     const schedule = await Schedule.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
-      .populate('viaturaId', 'matricula modelo');
+      .populate('viaturaId', 'matricula modelo frotaId');
     if (!schedule) return res.status(404).json({ message: 'Schedule not found' });
     const mat = schedule.viaturaId?.matricula || '—';
     const tipo = TIPO_PT[schedule.tipoEvento] || schedule.tipoEvento || 'Evento';
@@ -71,6 +86,7 @@ exports.update = async (req, res) => {
       descricao: `Editou agendamento de ${tipo} para a viatura ${mat}`,
       referencia: mat,
       referenciaId: schedule._id,
+      frotaIds: [schedule.viaturaId?.frotaId],
     });
     syncVehicleStatuses().catch(console.error);
     res.status(200).json(schedule);
@@ -81,6 +97,10 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
+    const existing = await Schedule.findById(req.params.id).select('viaturaId').populate('viaturaId', 'frotaId');
+    if (!existing) return res.status(404).json({ message: 'Schedule not found' });
+    if (!(await isVehicleAllowed(req.user, existing.viaturaId?._id))) return res.status(403).json({ message: 'Access denied' });
+
     const schedule = await Schedule.findByIdAndDelete(req.params.id);
     if (!schedule) return res.status(404).json({ message: 'Schedule not found' });
     logActivity({
@@ -89,6 +109,7 @@ exports.remove = async (req, res) => {
       entidade: 'Agenda',
       descricao: `Eliminou agendamento de ${TIPO_PT[schedule.tipoEvento] || schedule.tipoEvento || 'Evento'}`,
       referenciaId: schedule._id,
+      frotaIds: [existing.viaturaId?.frotaId],
     });
     syncVehicleStatuses().catch(console.error);
     res.json({ message: 'Schedule deleted' });

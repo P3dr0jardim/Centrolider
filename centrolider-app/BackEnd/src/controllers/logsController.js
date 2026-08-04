@@ -1,8 +1,9 @@
 const Log = require('../models/Log');
+const { logFilter } = require('../utils/fleetScope');
 
 exports.getAll = async (req, res) => {
   try {
-    const filter = {};
+    const filter = { ...logFilter(req.user) };
     if (req.query.entidade) filter.entidade = req.query.entidade;
     if (req.query.userId)   filter.userId   = req.query.userId;
     if (req.query.from || req.query.to) {
