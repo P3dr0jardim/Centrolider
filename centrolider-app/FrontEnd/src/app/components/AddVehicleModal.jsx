@@ -31,6 +31,7 @@ export function AddVehicleModal({ isOpen, onClose, onSave }) {
     setError(null);
     try {
       await onSave(data);
+      setSaving(false);
     } catch (err) {
       setError(err.message);
       setSaving(false);

@@ -65,6 +65,7 @@ export const api = {
   // Revenues
   getRevenues: (params) => request('GET', `/revenues${qs(params)}`),
   createRevenue: (data) => request('POST', '/revenues', data),
+  bulkCreateRevenue: (data) => request('POST', '/revenues/bulk', data),
   updateRevenue: (id, data) => request('PUT', `/revenues/${id}`, data),
   deleteRevenue: (id) => request('DELETE', `/revenues/${id}`),
 

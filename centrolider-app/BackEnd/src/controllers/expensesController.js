@@ -5,7 +5,7 @@ const { allowedVehicleIds, isVehicleAllowed } = require('../utils/fleetScope');
 const TIPO_PT = {
   manutencao: 'Manutenção', reparacao: 'Reparação', combustivel: 'Combustível',
   portagem: 'Portagem', seguro: 'Seguro', inspecao: 'Inspeção',
-  multa: 'Multa', outro: 'Outro',
+  multa: 'Multa', gps: 'GPS', iuc: 'IUC', outro: 'Outro',
 };
 
 exports.getAll = async (req, res) => {

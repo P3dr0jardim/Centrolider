@@ -9,6 +9,8 @@ const TIPOS = [
   { value: "portagem",     label: "Portagem" },
   { value: "inspecao",     label: "Inspeção" },
   { value: "multa",        label: "Multa" },
+  { value: "gps",          label: "GPS" },
+  { value: "iuc",          label: "IUC" },
   { value: "outro",        label: "Outro" },
 ];
 

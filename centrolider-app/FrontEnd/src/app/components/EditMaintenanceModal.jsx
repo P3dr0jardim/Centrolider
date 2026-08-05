@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { X, Paperclip } from "lucide-react";
 
 const OFICINAS = [
   "Autocrescente Ribeira Brava",
@@ -34,6 +34,7 @@ export function EditMaintenanceModal({ isOpen, onClose, onSave, record }) {
   const [error, setError] = useState(null);
   const [showOficinaSugg, setShowOficinaSugg] = useState(false);
   const oficinaSuggRef = useRef(null);
+  const [attachmentFile, setAttachmentFile] = useState(null);
 
   useEffect(() => {
     if (record) {
@@ -46,6 +47,7 @@ export function EditMaintenanceModal({ isOpen, onClose, onSave, record }) {
       });
       setError(null);
       setShowOficinaSugg(false);
+      setAttachmentFile(null);
     }
   }, [record]);
 
@@ -80,6 +82,7 @@ export function EditMaintenanceModal({ isOpen, onClose, onSave, record }) {
         descricao: form.descricao,
         oficina: form.oficina,
         custo: form.custo !== "" ? parseFloat(form.custo) : 0,
+        attachmentFile: attachmentFile || undefined,
       });
       onClose();
     } catch (err) {
@@ -211,6 +214,25 @@ export function EditMaintenanceModal({ isOpen, onClose, onSave, record }) {
                 placeholder="0.00"
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Documento Anexo (opcional)</label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors flex-1 min-w-0">
+                  <Paperclip className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <span className="text-sm text-gray-500 truncate">
+                    {attachmentFile ? attachmentFile.name : "Selecionar ficheiro…"}
+                  </span>
+                  <input type="file" className="hidden" onChange={(e) => setAttachmentFile(e.target.files[0] || null)} />
+                </label>
+                {attachmentFile && (
+                  <button type="button" onClick={() => setAttachmentFile(null)}
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

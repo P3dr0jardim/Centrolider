@@ -184,7 +184,15 @@ export function ManutencaoView() {
 
   // Called from inline edit modal
   const handleUpdateRecord = async (recordId, data) => {
-    const updated = await api.updateMaintenance(editingRecord.vehicleId, recordId, data);
+    const { attachmentFile, ...rest } = data;
+    let updated = await api.updateMaintenance(editingRecord.vehicleId, recordId, rest);
+    if (attachmentFile) {
+      const attachFd = new FormData();
+      attachFd.append("file", attachmentFile);
+      attachFd.append("manutencaoId", String(recordId));
+      attachFd.append("data", rest.data);
+      updated = await api.addAttachment(editingRecord.vehicleId, attachFd);
+    }
     updateVehicle(updated);
     setEditingRecord(null);
   };

@@ -5,6 +5,7 @@ const auth = require('../middleware/auth');
 router.use(auth);
 
 router.get('/', revenuesController.getAll);
+router.post('/bulk', revenuesController.bulkCreate);
 router.get('/:id', revenuesController.getOne);
 router.post('/', revenuesController.create);
 router.put('/:id', revenuesController.update);

@@ -1,6 +1,7 @@
 const Revenue = require('../models/Revenue');
+const Vehicle = require('../models/Vehicle');
 const { logActivity } = require('../utils/logActivity');
-const { allowedVehicleIds, isVehicleAllowed } = require('../utils/fleetScope');
+const { allowedVehicleIds, isVehicleAllowed, vehicleFleetFilter } = require('../utils/fleetScope');
 
 exports.getAll = async (req, res) => {
   try {
@@ -52,6 +53,37 @@ exports.create = async (req, res) => {
       frotaIds: [revenue.vehicleId?.frotaId],
     });
     res.status(201).json(revenue);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.bulkCreate = async (req, res) => {
+  try {
+    const { vehicleIds, tipo, valor, data, descricao } = req.body;
+    if (!Array.isArray(vehicleIds) || vehicleIds.length === 0)
+      return res.status(400).json({ message: 'vehicleIds array required' });
+    if (!tipo || valor === undefined || !data)
+      return res.status(400).json({ message: 'tipo, valor and data are required' });
+
+    const allowedVehicles = await Vehicle.find({ _id: { $in: vehicleIds }, ...vehicleFleetFilter(req.user) })
+      .select('_id frotaId');
+    if (allowedVehicles.length === 0) return res.status(403).json({ message: 'Access denied' });
+
+    const created = await Revenue.insertMany(
+      allowedVehicles.map((v) => ({ vehicleId: v._id, tipo, valor, data, descricao }))
+    );
+
+    const frotaIds = [...new Set(allowedVehicles.map((v) => String(v.frotaId)).filter(Boolean))];
+    logActivity({
+      user: req.user,
+      acao: 'Registou',
+      entidade: 'Receita',
+      descricao: `Registou receita de €${valor} em ${created.length} viatura${created.length === 1 ? '' : 's'}`,
+      frotaIds,
+    });
+
+    res.status(201).json({ created: created.length });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

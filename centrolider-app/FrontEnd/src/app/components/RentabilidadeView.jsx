@@ -1,10 +1,11 @@
-import { TrendingUp, TrendingDown, Euro, Calculator, BarChart2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Euro, Calculator, BarChart2, PlusCircle } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import { api } from "../../services/api";
 import { ContabilidadeTab } from "./ContabilidadeTab";
+import { AddBulkRevenueModal } from "./AddBulkRevenueModal";
 
 const fmtEuro = (v) =>
   `€${Number(v).toLocaleString("pt-PT", { minimumFractionDigits: 0 })}`;
@@ -33,12 +34,18 @@ export function RentabilidadeView() {
   const [data, setData]           = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
+  const [isBulkRevenueOpen, setIsBulkRevenueOpen] = useState(false);
 
-  useEffect(() => {
+  const loadRentabilidade = () => {
+    setLoading(true);
     api.getStatsRentabilidade()
       .then(setData)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadRentabilidade();
   }, []);
 
   const totals = useMemo(() => {
@@ -67,22 +74,40 @@ export function RentabilidadeView() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-        {TABS.map(({ id, label, icon: Icon }) => (
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === id
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "rentabilidade" && (
           <button
-            key={id}
-            onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === id
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
+            onClick={() => setIsBulkRevenueOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm"
           >
-            <Icon className="w-4 h-4" />
-            {label}
+            <PlusCircle className="w-4 h-4" />
+            Adicionar Ganho em Massa
           </button>
-        ))}
+        )}
       </div>
+
+      <AddBulkRevenueModal
+        isOpen={isBulkRevenueOpen}
+        onClose={() => setIsBulkRevenueOpen(false)}
+        onSaved={loadRentabilidade}
+      />
 
       {/* Tab content */}
       {activeTab === "contabilidade" && <ContabilidadeTab />}

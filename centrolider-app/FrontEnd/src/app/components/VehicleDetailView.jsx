@@ -197,7 +197,15 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
   };
 
   const handleUpdateMaintenance = async (recordId, data) => {
-    const updated = await api.updateMaintenance(vehicleData._id, recordId, data);
+    const { attachmentFile, ...rest } = data;
+    let updated = await api.updateMaintenance(vehicleData._id, recordId, rest);
+    if (attachmentFile) {
+      const attachFd = new FormData();
+      attachFd.append("file", attachmentFile);
+      attachFd.append("manutencaoId", String(recordId));
+      attachFd.append("data", rest.data);
+      updated = await api.addAttachment(vehicleData._id, attachFd);
+    }
     setVehicleData(updated);
     if (onVehicleUpdated) onVehicleUpdated(updated);
   };

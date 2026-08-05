@@ -68,6 +68,8 @@ export function AddExpenseModal({ isOpen, onClose, onSave, vehicleId }) {
                 <option value="seguro">Seguro</option>
                 <option value="portagem">Portagem</option>
                 <option value="multa">Multa</option>
+                <option value="gps">GPS</option>
+                <option value="iuc">IUC</option>
                 <option value="outro">Outro</option>
               </select>
             </div>

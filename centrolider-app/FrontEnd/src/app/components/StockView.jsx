@@ -31,6 +31,7 @@ export function StockView() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [mainTab, setMainTab] = useState("inventario");   // "inventario" | "historico"
+  const [fleetTab, setFleetTab] = useState("global");      // "global" | fleet _id
   const [inventoryTab, setInventoryTab] = useState("todos");
   const [historyTab, setHistoryTab] = useState("pneus");
   const [vehicleDetail, setVehicleDetail] = useState(null);   // vehicle object to drill into
@@ -74,26 +75,43 @@ export function StockView() {
     [stockItems]
   );
 
+  // ── Items scoped to the selected fleet tab ("global" = no fleet filter) ──
+  const fleetScopedItems = useMemo(() =>
+    fleetTab === "global"
+      ? stockItems
+      : stockItems.filter((item) => (item.frotaIds || []).some((id) => String(id) === fleetTab)),
+    [stockItems, fleetTab]
+  );
+
+  // ── Count per fleet tab (how many items each fleet has) ─────────────
+  const countByFleet = useMemo(() => {
+    const map = { global: stockItems.length };
+    for (const f of fleets) {
+      map[f._id] = stockItems.filter((i) => (i.frotaIds || []).some((id) => String(id) === String(f._id))).length;
+    }
+    return map;
+  }, [stockItems, fleets]);
+
   // ── Filtered inventory ─────────────────────────────────────────────
   const filteredItems = useMemo(() =>
-    stockItems.filter((item) => {
+    fleetScopedItems.filter((item) => {
       const matchSearch =
         item.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (CAT_LABEL[item.categoria] || item.categoria).toLowerCase().includes(searchTerm.toLowerCase());
       const matchCat = inventoryTab === "todos" || item.categoria === inventoryTab;
       return matchSearch && matchCat;
     }),
-    [stockItems, searchTerm, inventoryTab]
+    [fleetScopedItems, searchTerm, inventoryTab]
   );
 
-  // ── Count per category for inventory tabs ──────────────────────────
+  // ── Count per category for inventory tabs (within the selected fleet) ───
   const countByCategory = useMemo(() => {
-    const map = { todos: stockItems.length };
+    const map = { todos: fleetScopedItems.length };
     for (const cat of CATEGORIAS) {
-      map[cat.value] = stockItems.filter((i) => i.categoria === cat.value).length;
+      map[cat.value] = fleetScopedItems.filter((i) => i.categoria === cat.value).length;
     }
     return map;
-  }, [stockItems]);
+  }, [fleetScopedItems]);
 
   // ── History: flatten all historico entries per category ────────────
   const historyByCategory = useMemo(() => {
@@ -221,6 +239,36 @@ export function StockView() {
         {/* ── Inventário tab ─────────────────────────────────────────── */}
         {mainTab === "inventario" && (
           <div>
+            {/* Fleet sub-tabs */}
+            <div className="border-b border-gray-100 px-6 overflow-x-auto bg-gray-50/50">
+              <div className="flex gap-1 py-2 min-w-max">
+                {[{ _id: "global", name: "Global" }, ...fleets].map((f) => {
+                  const count = countByFleet[f._id] || 0;
+                  const active = fleetTab === f._id;
+                  return (
+                    <button
+                      key={f._id}
+                      onClick={() => setFleetTab(f._id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap border ${
+                        active
+                          ? "bg-blue-600 border-blue-600 text-white"
+                          : "bg-white border-gray-300 text-gray-600 hover:border-blue-400"
+                      }`}
+                    >
+                      {f.name}
+                      {count > 0 && (
+                        <span className={`ml-1.5 px-1.5 py-0.5 text-xs rounded-full ${
+                          active ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-600"
+                        }`}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Category sub-tabs */}
             <div className="border-b border-gray-100 px-6 overflow-x-auto">
               <div className="flex gap-1 py-2 min-w-max">

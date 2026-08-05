@@ -282,6 +282,8 @@ export function AddExpenseStockModal({ isOpen, onClose, onSave, vehicleId, vehic
                 <option value="seguro">Seguro</option>
                 <option value="inspecao">Inspeção</option>
                 <option value="multa">Multa</option>
+                <option value="gps">GPS</option>
+                <option value="iuc">IUC</option>
                 <option value="outro">Outro</option>
               </select>
             </div>

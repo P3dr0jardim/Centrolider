@@ -4,7 +4,7 @@ const expenseSchema = new mongoose.Schema({
   vehicleId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vehicle', required: true },
   tipo: {
     type: String,
-    enum: ['combustivel', 'manutencao', 'reparacao', 'seguro', 'portagem', 'inspecao', 'multa', 'outro'],
+    enum: ['combustivel', 'manutencao', 'reparacao', 'seguro', 'portagem', 'inspecao', 'multa', 'gps', 'iuc', 'outro'],
     required: true,
   },
   valor: { type: Number, required: true, min: 0 },
