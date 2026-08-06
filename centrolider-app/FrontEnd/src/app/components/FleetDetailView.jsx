@@ -82,6 +82,11 @@ export function FleetDetailView({ fleet, onBack }) {
     if (selectedVehicle?._id === updated._id) setSelectedVehicle(updated);
   };
 
+  const refreshVehicles = () => {
+    if (!fleet?._id) return;
+    api.getVehicles({ frotaId: fleet._id }).then(setVehicles).catch(() => {});
+  };
+
   // --- Save handlers ---
 
   const handleSaveVehicle = async (data) => {
@@ -452,6 +457,7 @@ export function FleetDetailView({ fleet, onBack }) {
         onClose={() => setIsRentabilidadeOpen(false)}
         fleet={fleet}
         vehicles={vehicles}
+        onVehiclesChanged={refreshVehicles}
       />
 
       <EditVehicleModal

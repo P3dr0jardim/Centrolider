@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Save, Filter, X, Search, CheckCircle } from "lucide-react";
 import { api } from "../../services/api";
 
-const FIELDS = ["leasing", "seguroValor", "iuc"];
+const FIELDS = ["leasing", "seguroValor", "iuc", "rentabilidade"];
 
 const parseNum = (v) => {
   if (v === "" || v === null || v === undefined) return null;
@@ -39,6 +39,7 @@ export function ContabilidadeTab() {
   const [bulkLeasing, setBulkLeasing]   = useState("");
   const [bulkSeguro, setBulkSeguro]     = useState("");
   const [bulkIuc, setBulkIuc]           = useState("");
+  const [bulkRentabilidade, setBulkRentabilidade] = useState("");
   const [frotaFilter, setFrotaFilter]   = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [onlyStale, setOnlyStale]       = useState(false);
@@ -93,13 +94,14 @@ export function ContabilidadeTab() {
   );
 
   const totals = useMemo(() => {
-    let leasing = 0, seguro = 0, iuc = 0;
+    let leasing = 0, seguro = 0, iuc = 0, rentabilidade = 0;
     for (const v of displayVehicles) {
-      leasing += parseNum(getVal(v, "leasing")) ?? 0;
-      seguro  += parseNum(getVal(v, "seguroValor")) ?? 0;
-      iuc     += parseNum(getVal(v, "iuc")) ?? 0;
+      leasing       += parseNum(getVal(v, "leasing")) ?? 0;
+      seguro        += parseNum(getVal(v, "seguroValor")) ?? 0;
+      iuc           += parseNum(getVal(v, "iuc")) ?? 0;
+      rentabilidade += parseNum(getVal(v, "rentabilidade")) ?? 0;
     }
-    return { leasing, seguro, iuc };
+    return { leasing, seguro, iuc, rentabilidade };
   }, [displayVehicles, getVal]);
 
   const setDraft = (id, field, value) =>
@@ -123,18 +125,19 @@ export function ContabilidadeTab() {
     setSelected((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
   const handleBulkApply = () => {
-    if (!someChecked || (bulkLeasing === "" && bulkSeguro === "" && bulkIuc === "")) return;
+    if (!someChecked || (bulkLeasing === "" && bulkSeguro === "" && bulkIuc === "" && bulkRentabilidade === "")) return;
     setDrafts((prev) => {
       const next = { ...prev };
       for (const id of selected) {
         next[id] = { ...next[id] };
-        if (bulkLeasing !== "") next[id].leasing     = bulkLeasing;
-        if (bulkSeguro  !== "") next[id].seguroValor = bulkSeguro;
-        if (bulkIuc     !== "") next[id].iuc         = bulkIuc;
+        if (bulkLeasing       !== "") next[id].leasing       = bulkLeasing;
+        if (bulkSeguro        !== "") next[id].seguroValor   = bulkSeguro;
+        if (bulkIuc           !== "") next[id].iuc           = bulkIuc;
+        if (bulkRentabilidade !== "") next[id].rentabilidade = bulkRentabilidade;
       }
       return next;
     });
-    setBulkLeasing(""); setBulkSeguro(""); setBulkIuc("");
+    setBulkLeasing(""); setBulkSeguro(""); setBulkIuc(""); setBulkRentabilidade("");
     setSelected(new Set());
   };
 
@@ -166,9 +169,10 @@ export function ContabilidadeTab() {
         .filter((v) => dirtyIds.includes(v._id))
         .map((v) => {
           const entry = { id: v._id };
-          if (isDirtyCell(v, "leasing"))     entry.leasing     = parseNum(drafts[v._id]?.leasing);
-          if (isDirtyCell(v, "seguroValor")) entry.seguroValor = parseNum(drafts[v._id]?.seguroValor);
-          if (isDirtyCell(v, "iuc"))         entry.iuc         = parseNum(drafts[v._id]?.iuc);
+          if (isDirtyCell(v, "leasing"))       entry.leasing       = parseNum(drafts[v._id]?.leasing);
+          if (isDirtyCell(v, "seguroValor"))   entry.seguroValor   = parseNum(drafts[v._id]?.seguroValor);
+          if (isDirtyCell(v, "iuc"))           entry.iuc           = parseNum(drafts[v._id]?.iuc);
+          if (isDirtyCell(v, "rentabilidade")) entry.rentabilidade = parseNum(drafts[v._id]?.rentabilidade);
           return entry;
         });
 
@@ -207,7 +211,7 @@ export function ContabilidadeTab() {
   return (
     <div className="space-y-6 pb-24">
       {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-5 border border-indigo-200">
           <p className="text-xs text-indigo-600 font-medium uppercase tracking-wide mb-1">Leasing / mês</p>
           <p className="text-2xl font-bold text-indigo-900">{fmt(totals.leasing)}</p>
@@ -226,6 +230,13 @@ export function ContabilidadeTab() {
           <p className="text-xs text-amber-600 font-medium uppercase tracking-wide mb-1">IUC / ano</p>
           <p className="text-2xl font-bold text-amber-900">{fmt(totals.iuc)}</p>
           <p className="text-xs text-amber-500 mt-1">≈ {fmt(totals.iuc / 12)}/mês</p>
+        </div>
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200">
+          <p className="text-xs text-blue-600 font-medium uppercase tracking-wide mb-1">Rentabilidade / mês</p>
+          <p className="text-2xl font-bold text-blue-900">{fmt(totals.rentabilidade)}</p>
+          <p className="text-xs text-blue-500 mt-1">
+            {displayVehicles.filter((v) => parseNum(getVal(v, "rentabilidade"))).length} viaturas
+          </p>
         </div>
         <div className="bg-gradient-to-br from-rose-50 to-rose-100 rounded-xl p-5 border border-rose-200">
           <p className="text-xs text-rose-600 font-medium uppercase tracking-wide mb-1">Encargos / mês</p>
@@ -324,12 +335,13 @@ export function ContabilidadeTab() {
                 <th className="px-4 py-3 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider">Leasing €/mês</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-purple-600 uppercase tracking-wider">Seguro €/mês</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-amber-600 uppercase tracking-wider">IUC €/ano</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600 uppercase tracking-wider">Rentab. €/mês</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {displayVehicles.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-400">
+                  <td colSpan={9} className="px-4 py-12 text-center text-sm text-gray-400">
                     {onlyStale ? "Todas as viaturas estão em dia." : "Nenhuma viatura encontrada."}
                   </td>
                 </tr>
@@ -340,6 +352,7 @@ export function ContabilidadeTab() {
                   const lDirty     = isDirtyCell(v, "leasing");
                   const sDirty     = isDirtyCell(v, "seguroValor");
                   const iDirty     = isDirtyCell(v, "iuc");
+                  const rDirty     = isDirtyCell(v, "rentabilidade");
                   const status     = isFlash ? "ok" : getFinancialStatus(v);
                   const st         = STATUS[status];
 
@@ -404,13 +417,24 @@ export function ContabilidadeTab() {
                             }`} />
                         </div>
                       </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex justify-end">
+                          <input type="number" min="0" step="0.01" value={getVal(v, "rentabilidade")}
+                            onChange={(e) => setDraft(v._id, "rentabilidade", e.target.value)}
+                            placeholder="0.00"
+                            className={`w-28 text-right px-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                              rDirty ? "border-blue-400 bg-blue-50 text-blue-800 font-medium" :
+                              isFlash ? "border-green-400 bg-green-50" : "border-gray-200 text-gray-700"
+                            }`} />
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
               )}
             </tbody>
 
-            {displayVehicles.length > 0 && (totals.leasing > 0 || totals.seguro > 0 || totals.iuc > 0) && (
+            {displayVehicles.length > 0 && (totals.leasing > 0 || totals.seguro > 0 || totals.iuc > 0 || totals.rentabilidade > 0) && (
               <tfoot className="bg-gray-50 border-t-2 border-gray-200">
                 <tr>
                   <td colSpan={5} className="px-4 py-3">
@@ -426,6 +450,9 @@ export function ContabilidadeTab() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <span className="text-sm font-bold text-amber-700">{fmt(totals.iuc)}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="text-sm font-bold text-blue-700">{fmt(totals.rentabilidade)}</span>
                   </td>
                 </tr>
               </tfoot>
@@ -460,9 +487,15 @@ export function ContabilidadeTab() {
               onChange={(e) => setBulkIuc(e.target.value)} placeholder="€/ano"
               className="w-24 text-right px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500" />
           </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-blue-600 whitespace-nowrap">Rentabilidade</span>
+            <input type="number" min="0" step="0.01" value={bulkRentabilidade}
+              onChange={(e) => setBulkRentabilidade(e.target.value)} placeholder="€/mês"
+              className="w-24 text-right px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
 
           <button onClick={handleBulkApply}
-            disabled={bulkLeasing === "" && bulkSeguro === "" && bulkIuc === ""}
+            disabled={bulkLeasing === "" && bulkSeguro === "" && bulkIuc === "" && bulkRentabilidade === ""}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors whitespace-nowrap">
             Aplicar
           </button>

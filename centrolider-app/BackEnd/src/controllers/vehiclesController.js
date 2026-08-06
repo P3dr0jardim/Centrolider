@@ -96,8 +96,8 @@ exports.bulkUpdateFinancial = async (req, res) => {
 
     const now = new Date();
     const results = await Promise.all(
-      updates.map(async ({ id, leasing, seguroValor, iuc }) => {
-        const current = await Vehicle.findById(id).select('leasing seguroValor iuc frotaId');
+      updates.map(async ({ id, leasing, seguroValor, iuc, rentabilidade }) => {
+        const current = await Vehicle.findById(id).select('leasing seguroValor iuc rentabilidade frotaId');
         if (!current) return null;
         if (!isFleetAllowed(req.user, current.frotaId)) return null;
 
@@ -111,9 +111,10 @@ exports.bulkUpdateFinancial = async (req, res) => {
             histEntries.push({ campo, valorAnterior: current[campo] ?? null, valorNovo: incoming, data: now });
           }
         };
-        check('leasing',     leasing);
-        check('seguroValor', seguroValor);
-        check('iuc',         iuc);
+        check('leasing',       leasing);
+        check('seguroValor',   seguroValor);
+        check('iuc',           iuc);
+        check('rentabilidade', rentabilidade);
 
         const update = { $set: fields };
         if (histEntries.length > 0) update.$push = { historicoFinanceiro: { $each: histEntries } };

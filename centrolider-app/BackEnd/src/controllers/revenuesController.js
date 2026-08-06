@@ -74,6 +74,14 @@ exports.bulkCreate = async (req, res) => {
       allowedVehicles.map((v) => ({ vehicleId: v._id, tipo, valor, data, descricao }))
     );
 
+    // "Renda" is a fixed recurring monthly income — keep the vehicle's rentabilidade card in sync.
+    if (tipo === 'renda') {
+      await Vehicle.updateMany(
+        { _id: { $in: allowedVehicles.map((v) => v._id) } },
+        { $set: { rentabilidade: valor } }
+      );
+    }
+
     const frotaIds = [...new Set(allowedVehicles.map((v) => String(v.frotaId)).filter(Boolean))];
     logActivity({
       user: req.user,

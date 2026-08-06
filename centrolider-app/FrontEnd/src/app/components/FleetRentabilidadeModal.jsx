@@ -1,11 +1,15 @@
-import { X, TrendingUp, Euro, Car } from "lucide-react";
+import { X, TrendingUp, Euro, Car, PlusCircle } from "lucide-react";
+import { useState } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
+import { BulkSetRentabilidadeModal } from "./BulkSetRentabilidadeModal";
 
 const fmtEuro = (v) => `€${Number(v).toLocaleString("pt-PT", { minimumFractionDigits: 0 })}`;
 
-export function FleetRentabilidadeModal({ isOpen, onClose, fleet, vehicles }) {
+export function FleetRentabilidadeModal({ isOpen, onClose, fleet, vehicles, onVehiclesChanged }) {
+  const [isBulkRentabilidadeOpen, setIsBulkRentabilidadeOpen] = useState(false);
+
   if (!isOpen) return null;
 
   const withRent = vehicles.filter((v) => v.rentabilidade > 0);
@@ -41,10 +45,27 @@ export function FleetRentabilidadeModal({ isOpen, onClose, fleet, vehicles }) {
             <h3 className="text-xl font-semibold text-gray-900">Rentabilidade da Frota</h3>
             <p className="text-sm text-gray-500 mt-1">{fleet?.name}</p>
           </div>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsBulkRentabilidadeOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Atualizar Rentabilidade em Massa
+            </button>
+            <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        <BulkSetRentabilidadeModal
+          isOpen={isBulkRentabilidadeOpen}
+          onClose={() => setIsBulkRentabilidadeOpen(false)}
+          vehicles={vehicles}
+          fleetName={fleet?.name}
+          onSaved={onVehiclesChanged}
+        />
 
         <div className="overflow-y-auto max-h-[calc(90vh-80px)] p-6 space-y-6">
           {/* KPI cards */}
