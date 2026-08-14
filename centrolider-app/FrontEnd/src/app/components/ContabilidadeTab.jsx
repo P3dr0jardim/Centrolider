@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Save, Filter, X, Search, CheckCircle } from "lucide-react";
+import { Save, Filter, X, Search, CheckCircle, Calendar } from "lucide-react";
 import { api } from "../../services/api";
+import { LeasingMensalModal } from "./LeasingMensalModal";
 
 const FIELDS = ["leasing", "seguroValor", "iuc", "rentabilidade"];
 
@@ -36,16 +37,20 @@ export function ContabilidadeTab() {
   const [loading, setLoading]           = useState(true);
   const [drafts, setDrafts]             = useState({});
   const [selected, setSelected]         = useState(new Set());
-  const [bulkLeasing, setBulkLeasing]   = useState("");
   const [bulkSeguro, setBulkSeguro]     = useState("");
   const [bulkIuc, setBulkIuc]           = useState("");
   const [bulkRentabilidade, setBulkRentabilidade] = useState("");
+  const [bulkLeasingData, setBulkLeasingData]   = useState(new Date().toISOString().slice(0, 10));
+  const [bulkLeasingValor, setBulkLeasingValor] = useState("");
+  const [bulkLeasingDescricao, setBulkLeasingDescricao] = useState("");
+  const [bulkLeasingSaving, setBulkLeasingSaving] = useState(false);
   const [frotaFilter, setFrotaFilter]   = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [onlyStale, setOnlyStale]       = useState(false);
   const [saving, setSaving]             = useState(false);
   const [confirming, setConfirming]     = useState(false);
   const [flashIds, setFlashIds]         = useState(new Set());
+  const [leasingModalVehicle, setLeasingModalVehicle] = useState(null);
 
   const allCheckRef = useRef(null);
 
@@ -125,20 +130,42 @@ export function ContabilidadeTab() {
     setSelected((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
   const handleBulkApply = () => {
-    if (!someChecked || (bulkLeasing === "" && bulkSeguro === "" && bulkIuc === "" && bulkRentabilidade === "")) return;
+    if (!someChecked || (bulkSeguro === "" && bulkIuc === "" && bulkRentabilidade === "")) return;
     setDrafts((prev) => {
       const next = { ...prev };
       for (const id of selected) {
         next[id] = { ...next[id] };
-        if (bulkLeasing       !== "") next[id].leasing       = bulkLeasing;
         if (bulkSeguro        !== "") next[id].seguroValor   = bulkSeguro;
         if (bulkIuc           !== "") next[id].iuc           = bulkIuc;
         if (bulkRentabilidade !== "") next[id].rentabilidade = bulkRentabilidade;
       }
       return next;
     });
-    setBulkLeasing(""); setBulkSeguro(""); setBulkIuc(""); setBulkRentabilidade("");
+    setBulkSeguro(""); setBulkIuc(""); setBulkRentabilidade("");
     setSelected(new Set());
+  };
+
+  const handleBulkApplyLeasing = async () => {
+    if (!someChecked || bulkLeasingValor === "" || bulkLeasingSaving) return;
+    setBulkLeasingSaving(true);
+    try {
+      await api.bulkSetLeasingMensal({
+        vehicleIds: [...selected],
+        data: bulkLeasingData,
+        valor: parseFloat(bulkLeasingValor),
+        descricao: bulkLeasingDescricao || undefined,
+      });
+      setVehicles(await api.getVehicles());
+      setFlashIds(new Set(selected));
+      setTimeout(() => setFlashIds(new Set()), 1800);
+      setBulkLeasingValor("");
+      setBulkLeasingDescricao("");
+      setSelected(new Set());
+    } catch (err) {
+      alert("Erro ao aplicar leasing: " + err.message);
+    } finally {
+      setBulkLeasingSaving(false);
+    }
   };
 
   const handleConfirmSelected = async () => {
@@ -385,7 +412,12 @@ export function ContabilidadeTab() {
                         )}
                       </td>
                       <td className="px-4 py-2.5">
-                        <div className="flex justify-end">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button type="button" onClick={() => setLeasingModalVehicle(v)}
+                            title="Leasing mensal"
+                            className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors">
+                            <Calendar className="w-3.5 h-3.5" />
+                          </button>
                           <input type="number" min="0" step="0.01" value={getVal(v, "leasing")}
                             onChange={(e) => setDraft(v._id, "leasing", e.target.value)}
                             placeholder="0.00"
@@ -463,57 +495,84 @@ export function ContabilidadeTab() {
 
       {/* Floating bulk bar */}
       {someChecked && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white border border-gray-200 rounded-2xl shadow-2xl px-5 py-3 flex items-center gap-3 flex-wrap animate-in slide-in-from-bottom-2 duration-200">
-          <span className="text-sm font-semibold text-gray-800 whitespace-nowrap">
-            {selected.size} viatura{selected.size !== 1 ? "s" : ""}
-          </span>
-          <div className="w-px h-6 bg-gray-200 hidden sm:block" />
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white border border-gray-200 rounded-2xl shadow-2xl px-5 py-3 flex flex-col gap-2.5 animate-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-semibold text-gray-800 whitespace-nowrap">
+              {selected.size} viatura{selected.size !== 1 ? "s" : ""}
+            </span>
+            <div className="w-px h-6 bg-gray-200 hidden sm:block" />
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-medium text-indigo-600 whitespace-nowrap">Leasing</span>
-            <input type="number" min="0" step="0.01" value={bulkLeasing}
-              onChange={(e) => setBulkLeasing(e.target.value)} placeholder="€/mês"
-              className="w-24 text-right px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-medium text-purple-600 whitespace-nowrap">Seguro</span>
-            <input type="number" min="0" step="0.01" value={bulkSeguro}
-              onChange={(e) => setBulkSeguro(e.target.value)} placeholder="€/mês"
-              className="w-24 text-right px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-medium text-amber-600 whitespace-nowrap">IUC</span>
-            <input type="number" min="0" step="0.01" value={bulkIuc}
-              onChange={(e) => setBulkIuc(e.target.value)} placeholder="€/ano"
-              className="w-24 text-right px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500" />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-medium text-blue-600 whitespace-nowrap">Rentabilidade</span>
-            <input type="number" min="0" step="0.01" value={bulkRentabilidade}
-              onChange={(e) => setBulkRentabilidade(e.target.value)} placeholder="€/mês"
-              className="w-24 text-right px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Calendar className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+              <span className="text-xs font-medium text-indigo-600 whitespace-nowrap">Leasing</span>
+              <input type="date" value={bulkLeasingData}
+                onChange={(e) => setBulkLeasingData(e.target.value)}
+                className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <input type="number" min="0" step="0.01" value={bulkLeasingValor}
+                onChange={(e) => setBulkLeasingValor(e.target.value)} placeholder="€/mês"
+                className="w-24 text-right px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <input type="text" value={bulkLeasingDescricao}
+                onChange={(e) => setBulkLeasingDescricao(e.target.value)} placeholder="Descrição (opcional)"
+                className="w-40 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <button onClick={handleBulkApplyLeasing}
+                disabled={bulkLeasingValor === "" || bulkLeasingSaving}
+                className="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors whitespace-nowrap">
+                {bulkLeasingSaving ? "A aplicar…" : "Aplicar Leasing"}
+              </button>
+            </div>
           </div>
 
-          <button onClick={handleBulkApply}
-            disabled={bulkLeasing === "" && bulkSeguro === "" && bulkIuc === "" && bulkRentabilidade === ""}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors whitespace-nowrap">
-            Aplicar
-          </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-purple-600 whitespace-nowrap">Seguro</span>
+              <input type="number" min="0" step="0.01" value={bulkSeguro}
+                onChange={(e) => setBulkSeguro(e.target.value)} placeholder="€/mês"
+                className="w-24 text-right px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-amber-600 whitespace-nowrap">IUC</span>
+              <input type="number" min="0" step="0.01" value={bulkIuc}
+                onChange={(e) => setBulkIuc(e.target.value)} placeholder="€/ano"
+                className="w-24 text-right px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-blue-600 whitespace-nowrap">Rentabilidade</span>
+              <input type="number" min="0" step="0.01" value={bulkRentabilidade}
+                onChange={(e) => setBulkRentabilidade(e.target.value)} placeholder="€/mês"
+                className="w-24 text-right px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
 
-          <div className="w-px h-6 bg-gray-200 hidden sm:block" />
+            <button onClick={handleBulkApply}
+              disabled={bulkSeguro === "" && bulkIuc === "" && bulkRentabilidade === ""}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors whitespace-nowrap">
+              Aplicar
+            </button>
 
-          <button onClick={handleConfirmSelected} disabled={confirming}
-            className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors whitespace-nowrap">
-            <CheckCircle className="w-4 h-4" />
-            {confirming ? "A confirmar…" : "Confirmar sem alterações"}
-          </button>
+            <div className="w-px h-6 bg-gray-200 hidden sm:block" />
 
-          <button onClick={() => setSelected(new Set())}
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+            <button onClick={handleConfirmSelected} disabled={confirming}
+              className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors whitespace-nowrap">
+              <CheckCircle className="w-4 h-4" />
+              {confirming ? "A confirmar…" : "Confirmar sem alterações"}
+            </button>
+
+            <button onClick={() => setSelected(new Set())}
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
+
+      <LeasingMensalModal
+        isOpen={!!leasingModalVehicle}
+        onClose={() => setLeasingModalVehicle(null)}
+        vehicle={leasingModalVehicle}
+        onSaved={(updated) => {
+          setVehicles((prev) => prev.map((v) => (v._id === updated._id ? updated : v)));
+          setLeasingModalVehicle(updated);
+        }}
+      />
     </div>
   );
 }

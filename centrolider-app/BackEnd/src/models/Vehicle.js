@@ -39,6 +39,13 @@ const vehicleSchema = new mongoose.Schema({
   leasing:     { type: Number, default: null },
   seguroValor: { type: Number, default: null },
   iuc:         { type: Number, default: null },
+  leasingMensal: [{
+    mes:       { type: String, required: true }, // "YYYY-MM", derived from `data`
+    valor:     { type: Number, required: true },
+    data:      { type: Date }, // exact day chosen for this month's leasing
+    descricao: { type: String, trim: true },
+    expenseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Expense', default: null },
+  }],
   valoresFinanceirosEm: { type: Date, default: null },
   historicoFinanceiro: [{
     campo:         { type: String },

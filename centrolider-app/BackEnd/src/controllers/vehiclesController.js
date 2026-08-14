@@ -1,4 +1,5 @@
 const Vehicle = require('../models/Vehicle');
+const Expense = require('../models/Expense');
 const { logActivity } = require('../utils/logActivity');
 const { vehicleFleetFilter, isFleetAllowed } = require('../utils/fleetScope');
 
@@ -139,6 +140,136 @@ exports.bulkConfirmFinancial = async (req, res) => {
 
     await Vehicle.updateMany({ _id: { $in: allowedIds } }, { valoresFinanceirosEm: new Date() });
     res.json({ confirmed: allowedIds.length });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Recomputes the "current" leasing value from leasingMensal: the most recent
+// entry whose month is not in the future, relative to today.
+function applyCurrentLeasing(vehicle) {
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const applicable = [...vehicle.leasingMensal]
+    .sort((a, b) => a.mes.localeCompare(b.mes))
+    .reverse()
+    .find((e) => e.mes <= currentMonth);
+  const novoValor = applicable ? applicable.valor : null;
+  if (vehicle.leasing !== novoValor) {
+    vehicle.historicoFinanceiro.push({
+      campo: 'leasing',
+      valorAnterior: vehicle.leasing ?? null,
+      valorNovo: novoValor,
+      data: new Date(),
+    });
+  }
+  vehicle.leasing = novoValor;
+  vehicle.valoresFinanceirosEm = new Date();
+}
+
+// Upserts a single vehicle's leasingMensal entry for the month of `data` ("YYYY-MM-DD"),
+// creating/updating the linked Expense record. Mutates `vehicle` in place; caller saves it.
+async function upsertLeasingMonth(vehicle, { data, valor, descricao }) {
+  const mes = data.slice(0, 7);
+  const dataDate = new Date(`${data}T00:00:00.000Z`);
+  const existing = vehicle.leasingMensal.find((e) => e.mes === mes);
+  const expenseDescricao = descricao || `Leasing mensal (${mes})`;
+
+  if (existing) {
+    existing.valor = valor;
+    existing.data = dataDate;
+    existing.descricao = descricao;
+    if (existing.expenseId) {
+      await Expense.findByIdAndUpdate(existing.expenseId, { valor, data: dataDate, descricao: expenseDescricao });
+    } else {
+      const expense = await Expense.create({
+        vehicleId: vehicle._id, tipo: 'leasing', valor, data: dataDate, descricao: expenseDescricao,
+      });
+      existing.expenseId = expense._id;
+    }
+  } else {
+    const expense = await Expense.create({
+      vehicleId: vehicle._id, tipo: 'leasing', valor, data: dataDate, descricao: expenseDescricao,
+    });
+    vehicle.leasingMensal.push({ mes, valor, data: dataDate, descricao, expenseId: expense._id });
+  }
+
+  applyCurrentLeasing(vehicle);
+  return mes;
+}
+
+exports.setLeasingMensal = async (req, res) => {
+  try {
+    const { data, valor, descricao } = req.body;
+    if (!data || valor === undefined) return res.status(400).json({ message: 'data and valor are required' });
+
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+    if (!isFleetAllowed(req.user, vehicle.frotaId)) return res.status(403).json({ message: 'Access denied' });
+
+    const mes = await upsertLeasingMonth(vehicle, { data, valor, descricao });
+
+    logActivity({
+      user: req.user,
+      acao: 'Registou',
+      entidade: 'Despesa',
+      descricao: `Registou despesa de Leasing (€${valor}) na viatura ${vehicle.matricula} referente a ${mes}`,
+      referencia: vehicle.matricula,
+      frotaIds: [vehicle.frotaId],
+    });
+
+    await vehicle.save();
+    res.json(vehicle);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.bulkSetLeasingMensal = async (req, res) => {
+  try {
+    const { vehicleIds, data, valor, descricao } = req.body;
+    if (!Array.isArray(vehicleIds) || vehicleIds.length === 0)
+      return res.status(400).json({ message: 'vehicleIds array required' });
+    if (!data || valor === undefined)
+      return res.status(400).json({ message: 'data and valor are required' });
+
+    const vehicles = await Vehicle.find({ _id: { $in: vehicleIds }, ...vehicleFleetFilter(req.user) });
+    if (vehicles.length === 0) return res.status(403).json({ message: 'Access denied' });
+
+    let mes;
+    for (const vehicle of vehicles) {
+      mes = await upsertLeasingMonth(vehicle, { data, valor, descricao });
+      await vehicle.save();
+    }
+
+    const frotaIds = [...new Set(vehicles.map((v) => String(v.frotaId)).filter(Boolean))];
+    logActivity({
+      user: req.user,
+      acao: 'Registou',
+      entidade: 'Despesa',
+      descricao: `Registou despesa de Leasing (€${valor}) em ${vehicles.length} viatura${vehicles.length === 1 ? '' : 's'} referente a ${mes}`,
+      frotaIds,
+    });
+
+    res.json({ updated: vehicles.length });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.deleteLeasingMensal = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+    if (!isFleetAllowed(req.user, vehicle.frotaId)) return res.status(403).json({ message: 'Access denied' });
+
+    const entry = vehicle.leasingMensal.find((e) => e.mes === req.params.mes);
+    if (entry?.expenseId) await Expense.findByIdAndDelete(entry.expenseId);
+
+    vehicle.leasingMensal = vehicle.leasingMensal.filter((e) => e.mes !== req.params.mes);
+
+    applyCurrentLeasing(vehicle);
+    await vehicle.save();
+    res.json(vehicle);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

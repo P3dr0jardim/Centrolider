@@ -34,6 +34,7 @@ import { AddRevenueModal } from "./AddRevenueModal";
 import { AddAttachmentModal } from "./AddAttachmentModal";
 import { EditVehicleModal } from "./EditVehicleModal";
 import { EditExpenseModal } from "./EditExpenseModal";
+import { EditRevenueModal } from "./EditRevenueModal";
 import { EditMaintenanceModal } from "./EditMaintenanceModal";
 import { MaintenanceDetailModal } from "./MaintenanceDetailModal";
 import { api } from "../../services/api";
@@ -72,6 +73,7 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
   const [revenues, setRevenues] = useState([]);
   const [txLoading, setTxLoading] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+  const [editingRevenue, setEditingRevenue] = useState(null);
   const [editingMaintenance, setEditingMaintenance] = useState(null);
   const [viewingMaintenance, setViewingMaintenance] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
@@ -194,6 +196,17 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
     if (!window.confirm("Eliminar esta despesa?")) return;
     await api.deleteExpense(id);
     setExpenses((prev) => prev.filter((e) => e._id !== id));
+  };
+
+  const handleUpdateRevenue = async (id, data) => {
+    const updated = await api.updateRevenue(id, data);
+    setRevenues((prev) => prev.map((r) => (r._id === id ? updated : r)));
+  };
+
+  const handleDeleteRevenue = async (id) => {
+    if (!window.confirm("Eliminar este ganho?")) return;
+    await api.deleteRevenue(id);
+    setRevenues((prev) => prev.filter((r) => r._id !== id));
   };
 
   const handleUpdateMaintenance = async (recordId, data) => {
@@ -617,24 +630,22 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
                               {tx._kind === "Receita" ? "+" : "-"}€{tx.valor.toFixed(2)}
                             </td>
                             <td className="px-4 py-3">
-                              {tx._kind === "Despesa" && (
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
-                                  <button
-                                    onClick={() => setEditingExpense(tx)}
-                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                    title="Editar"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteExpense(tx._id)}
-                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                    title="Eliminar"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              )}
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+                                <button
+                                  onClick={() => (tx._kind === "Despesa" ? setEditingExpense(tx) : setEditingRevenue(tx))}
+                                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                  title="Editar"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => (tx._kind === "Despesa" ? handleDeleteExpense(tx._id) : handleDeleteRevenue(tx._id))}
+                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1017,6 +1028,12 @@ export function VehicleDetailView({ vehicle, onBack, onVehicleUpdated }) {
         onClose={() => setEditingExpense(null)}
         onSave={handleUpdateExpense}
         expense={editingExpense}
+      />
+      <EditRevenueModal
+        isOpen={!!editingRevenue}
+        onClose={() => setEditingRevenue(null)}
+        onSave={handleUpdateRevenue}
+        revenue={editingRevenue}
       />
       <EditMaintenanceModal
         isOpen={!!editingMaintenance}
