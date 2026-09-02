@@ -1,12 +1,12 @@
-// Fetches a vehicle attachment (auth required, so it can't be a plain <a href>) and shows it in a
+// Fetches an attachment (auth required, so it can't be a plain <a href>) and shows it in a
 // new tab — inline for PDFs/images, downloaded otherwise. Opens the tab synchronously (before the
 // fetch resolves) so browsers don't treat it as a blocked popup, then navigates it once ready.
-export async function openAttachment(vehicleId, att) {
+export async function openAttachmentAt(path, att) {
   const newTab = window.open("", "_blank");
   try {
     const base = import.meta.env.VITE_API_BASE ?? "/api";
     const token = localStorage.getItem("cl_token");
-    const res = await fetch(`${base}/vehicles/${vehicleId}/attachments/${att._id}`, {
+    const res = await fetch(`${base}${path}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) {
@@ -34,3 +34,9 @@ export async function openAttachment(vehicleId, att) {
     throw err;
   }
 }
+
+export const openAttachment = (vehicleId, att) =>
+  openAttachmentAt(`/vehicles/${vehicleId}/attachments/${att._id}`, att);
+
+export const openStockAttachment = (stockItemId, att) =>
+  openAttachmentAt(`/stock/${stockItemId}/attachments/${att._id}`, att);

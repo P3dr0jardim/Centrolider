@@ -1,6 +1,6 @@
 import {
   Package, AlertTriangle, TrendingDown, ShoppingCart,
-  Plus, Search, Pencil, Trash2, History, BarChart2, ArrowLeft,
+  Plus, Search, Pencil, Trash2, History, BarChart2, ArrowLeft, Paperclip,
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import {
@@ -33,6 +33,7 @@ export function StockView() {
   const [mainTab, setMainTab] = useState("inventario");   // "inventario" | "historico"
   const [fleetTab, setFleetTab] = useState("global");      // "global" | fleet _id
   const [inventoryTab, setInventoryTab] = useState("todos");
+  const [tyreSizeFilter, setTyreSizeFilter] = useState("todos");
   const [historyTab, setHistoryTab] = useState("pneus");
   const [vehicleDetail, setVehicleDetail] = useState(null);   // vehicle object to drill into
   const [vehicleDetailLoading, setVehicleDetailLoading] = useState(false);
@@ -92,6 +93,16 @@ export function StockView() {
     return map;
   }, [stockItems, fleets]);
 
+  // ── Distinct tyre sizes available within the current fleet scope ────
+  const tyreSizes = useMemo(() =>
+    [...new Set(
+      fleetScopedItems
+        .filter((i) => i.categoria === "pneus" && i.tamanhoPneu)
+        .map((i) => i.tamanhoPneu)
+    )].sort(),
+    [fleetScopedItems]
+  );
+
   // ── Filtered inventory ─────────────────────────────────────────────
   const filteredItems = useMemo(() =>
     fleetScopedItems.filter((item) => {
@@ -99,9 +110,11 @@ export function StockView() {
         item.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (CAT_LABEL[item.categoria] || item.categoria).toLowerCase().includes(searchTerm.toLowerCase());
       const matchCat = inventoryTab === "todos" || item.categoria === inventoryTab;
-      return matchSearch && matchCat;
+      const matchSize =
+        inventoryTab !== "pneus" || tyreSizeFilter === "todos" || item.tamanhoPneu === tyreSizeFilter;
+      return matchSearch && matchCat && matchSize;
     }),
-    [fleetScopedItems, searchTerm, inventoryTab]
+    [fleetScopedItems, searchTerm, inventoryTab, tyreSizeFilter]
   );
 
   // ── Count per category for inventory tabs (within the selected fleet) ───
@@ -137,13 +150,23 @@ export function StockView() {
   const openEdit = (item) => { setEditItem(item); setModalOpen(true); };
 
   const handleSave = async (data) => {
+    const { attachmentFile, ...fields } = data;
+    let saved;
     if (editItem) {
-      const updated = await api.updateStockItem(editItem._id, data);
-      setStockItems((prev) => prev.map((i) => i._id === updated._id ? updated : i));
+      saved = await api.updateStockItem(editItem._id, fields);
     } else {
-      const created = await api.createStockItem(data);
-      setStockItems((prev) => [...prev, created]);
+      saved = await api.createStockItem(fields);
     }
+    if (attachmentFile) {
+      const fd = new FormData();
+      fd.append("file", attachmentFile);
+      saved = await api.addStockAttachment(saved._id, fd);
+    }
+    setStockItems((prev) =>
+      editItem
+        ? prev.map((i) => (i._id === saved._id ? saved : i))
+        : [...prev, saved]
+    );
     setModalOpen(false);
   };
 
@@ -278,7 +301,7 @@ export function StockView() {
                   return (
                     <button
                       key={cat.value}
-                      onClick={() => setInventoryTab(cat.value)}
+                      onClick={() => { setInventoryTab(cat.value); setTyreSizeFilter("todos"); }}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                         active ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
                       }`}
@@ -298,17 +321,31 @@ export function StockView() {
             </div>
 
             {/* Search bar */}
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
               <span className="text-sm text-gray-500">{filteredItems.length} itens</span>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar itens…"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-60"
-                />
+              <div className="flex items-center gap-2">
+                {inventoryTab === "pneus" && tyreSizes.length > 0 && (
+                  <select
+                    value={tyreSizeFilter}
+                    onChange={(e) => setTyreSizeFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="todos">Todos os tamanhos</option>
+                    {tyreSizes.map((size) => (
+                      <option key={size} value={size}>{size}</option>
+                    ))}
+                  </select>
+                )}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Pesquisar itens…"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-60"
+                  />
+                </div>
               </div>
             </div>
 
@@ -345,7 +382,21 @@ export function StockView() {
                             {CAT_LABEL[item.categoria] || item.categoria}
                           </span>
                         </td>
-                        <td className="px-6 py-3 text-sm text-gray-800">{item.nome}</td>
+                        <td className="px-6 py-3 text-sm text-gray-800">
+                          <div>{item.nome}</div>
+                          {(item.numeroFatura || item.attachments?.length > 0) && (
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {item.numeroFatura && (
+                                <span className="text-xs text-gray-400">Fatura: {item.numeroFatura}</span>
+                              )}
+                              {item.attachments?.length > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-xs text-blue-500">
+                                  <Paperclip className="w-3 h-3" /> {item.attachments.length}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-6 py-3 text-xs text-gray-500">
                           {(item.frotaIds || []).map((id) => fleetName(id)).join(", ") || "—"}
                         </td>

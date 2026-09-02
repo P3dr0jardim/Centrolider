@@ -1,5 +1,7 @@
-import { X, AlertTriangle, ChevronDown } from "lucide-react";
+import { X, AlertTriangle, ChevronDown, Paperclip, FileText, Trash2 } from "lucide-react";
 import { useState, useEffect, useMemo, useRef } from "react";
+import { openStockAttachment } from "../utils/openAttachment";
+import { api } from "../../services/api";
 
 const CATEGORIAS = [
   { value: "pneus",    label: "Pneus" },
@@ -18,7 +20,12 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
   const [minimo, setMinimo]       = useState("");
   const [fornecedor, setFornecedor] = useState("");
   const [preco, setPreco]         = useState("");
+  const [tamanhoPneu, setTamanhoPneu] = useState("");
   const [frotaIds, setFrotaIds]   = useState([]);
+  const [numeroFatura, setNumeroFatura] = useState("");
+  const [attachmentFile, setAttachmentFile] = useState(null);
+  const [attachments, setAttachments] = useState([]);
+  const [deletingAttId, setDeletingAttId] = useState(null);
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState(null);
   const [showSugg, setShowSugg]   = useState(false);
@@ -29,6 +36,7 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
   useEffect(() => {
     if (!isOpen) return;
     setSaving(false); setError(null); setShowSugg(false);
+    setAttachmentFile(null);
     if (isEdit) {
       setCategoria(item.categoria || "");
       setNome(item.nome || "");
@@ -36,10 +44,14 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
       setMinimo(item.minimo ?? "");
       setFornecedor(item.fornecedor || "");
       setPreco(item.preco ?? "");
+      setTamanhoPneu(item.tamanhoPneu || "");
       setFrotaIds((item.frotaIds || []).map(String));
+      setNumeroFatura(item.numeroFatura || "");
+      setAttachments(item.attachments || []);
     } else {
       setCategoria(""); setNome(""); setQuantidade(""); setMinimo("");
-      setFornecedor(""); setPreco("");
+      setFornecedor(""); setPreco(""); setNumeroFatura(""); setTamanhoPneu("");
+      setAttachments([]);
       setFrotaIds(fleets.length === 1 ? [String(fleets[0]._id)] : []);
     }
   }, [isOpen, item, fleets]);
@@ -95,10 +107,26 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
         fornecedor: fornecedor || undefined,
         preco:      preco !== "" ? Number(preco) : undefined,
         frotaIds,
+        numeroFatura: numeroFatura || undefined,
+        tamanhoPneu: categoria === "pneus" ? (tamanhoPneu || undefined) : undefined,
+        attachmentFile: attachmentFile || undefined,
       });
     } catch (err) {
       setError(err.message);
       setSaving(false);
+    }
+  };
+
+  const handleDeleteAttachment = async (attId) => {
+    if (!item || !window.confirm("Eliminar este anexo?")) return;
+    setDeletingAttId(attId);
+    try {
+      const updated = await api.deleteStockAttachment(item._id, attId);
+      setAttachments(updated.attachments || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingAttId(null);
     }
   };
 
@@ -108,6 +136,7 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
     setFornecedor(s.fornecedor || fornecedor);
     setPreco(s.preco != null ? String(s.preco) : preco);
     setMinimo(s.minimo != null ? String(s.minimo) : minimo);
+    setTamanhoPneu(s.tamanhoPneu || tamanhoPneu);
     setShowSugg(false);
   };
 
@@ -140,6 +169,15 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
                 ))}
               </select>
             </div>
+
+            {categoria === "pneus" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tamanho do Pneu</label>
+                <input type="text" value={tamanhoPneu} onChange={(e) => setTamanhoPneu(e.target.value)}
+                  placeholder="Ex: 205/55 R16"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -254,6 +292,50 @@ export function AddStockModal({ isOpen, onClose, onSave, item, existingItems = [
               <input type="number" value={preco} onChange={(e) => setPreco(e.target.value)}
                 placeholder="Ex: 85.50" step="0.01" min="0"
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Número da Fatura</label>
+              <input type="text" value={numeroFatura} onChange={(e) => setNumeroFatura(e.target.value)}
+                placeholder="Ex: FT 2026/1234"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Anexar Fatura (opcional)</label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors flex-1 min-w-0">
+                  <Paperclip className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <span className="text-sm text-gray-500 truncate">
+                    {attachmentFile ? attachmentFile.name : "Selecionar ficheiro…"}
+                  </span>
+                  <input type="file" className="hidden" onChange={(e) => setAttachmentFile(e.target.files[0] || null)} />
+                </label>
+                {attachmentFile && (
+                  <button type="button" onClick={() => setAttachmentFile(null)}
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {attachments.length > 0 && (
+                <div className="mt-3 space-y-1.5">
+                  {attachments.map((att) => (
+                    <div key={att._id} className="flex items-center justify-between px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                      <button type="button" onClick={() => openStockAttachment(item._id, att)}
+                        className="flex items-center gap-2 min-w-0 text-left hover:text-blue-600 transition-colors">
+                        <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <span className="text-sm text-gray-700 truncate">{att.originalName || att.filename}</span>
+                      </button>
+                      <button type="button" onClick={() => handleDeleteAttachment(att._id)} disabled={deletingAttId === att._id}
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50 flex-shrink-0">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

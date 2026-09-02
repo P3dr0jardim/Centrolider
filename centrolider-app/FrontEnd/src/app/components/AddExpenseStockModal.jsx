@@ -5,6 +5,8 @@ import { api } from "../../services/api";
 const MAINTENANCE_TYPES = ["manutencao", "reparacao"];
 
 const OFICINAS = [
+  "Oficina Amparo",
+  "Oficina Aeroporto",
   "Autocrescente Ribeira Brava",
   "Autocrescente Canhas",
   "Maturifuel",

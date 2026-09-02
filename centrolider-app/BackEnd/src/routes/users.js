@@ -10,12 +10,16 @@ const createValidation = [
   body('role').isIn(['accounting', 'manager', 'admin']),
   body('name').notEmpty().trim(),
   body('email').isEmail().normalizeEmail(),
+  body('app').optional().isIn(['centrolider', 'minunes']),
+  body('allowedFleets').optional().isArray(),
 ];
 
 const updateValidation = [
   body('role').optional().isIn(['accounting', 'manager', 'admin']),
   body('password').optional().isLength({ min: 6 }),
   body('email').optional().isEmail().normalizeEmail(),
+  body('app').optional().isIn(['centrolider', 'minunes']),
+  body('allowedFleets').optional().isArray(),
 ];
 
 router.use(auth, requireAdmin);

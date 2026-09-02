@@ -16,6 +16,9 @@ const ROLE_BADGE = {
   accounting: "bg-green-100 text-green-700",
 };
 
+const APP_LABEL = { centrolider: "Centrolider", minunes: "MI Nunes" };
+const APP_BADGE = { centrolider: "bg-indigo-100 text-indigo-700", minunes: "bg-teal-100 text-teal-700" };
+
 export function UsersView() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
@@ -120,13 +123,14 @@ export function UsersView() {
                 <th className="px-6 py-3 text-left">Utilizador</th>
                 <th className="px-6 py-3 text-left">Email</th>
                 <th className="px-6 py-3 text-center">Função</th>
+                <th className="px-6 py-3 text-center">Aplicação</th>
                 <th className="px-6 py-3 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-400 text-sm">
+                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400 text-sm">
                     Nenhum utilizador encontrado.
                   </td>
                 </tr>
@@ -151,6 +155,11 @@ export function UsersView() {
                     <td className="px-6 py-3 text-center">
                       <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${ROLE_BADGE[u.role] || "bg-gray-100 text-gray-700"}`}>
                         {ROLE_LABEL[u.role] || u.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-center">
+                      <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${APP_BADGE[u.app] || APP_BADGE.centrolider}`}>
+                        {APP_LABEL[u.app] || APP_LABEL.centrolider}
                       </span>
                     </td>
                     <td className="px-6 py-3">

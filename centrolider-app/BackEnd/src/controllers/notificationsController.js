@@ -1,7 +1,7 @@
 const Vehicle = require('../models/Vehicle');
 const Schedule = require('../models/Schedule');
 const StockItem = require('../models/StockItem');
-const { vehicleFleetFilter, isFleetAllowed } = require('../utils/fleetScope');
+const { vehicleFleetFilter, isFleetAllowed, stockFilter } = require('../utils/fleetScope');
 
 const EVENT_LABELS = {
   inspecao:  'Inspeção',
@@ -79,6 +79,7 @@ exports.getNotifications = async (req, res) => {
     const lowStockItems = await StockItem.find({
       minimo: { $gt: 0 },
       $expr: { $lte: ['$quantidade', '$minimo'] },
+      ...stockFilter(req.user),
     });
 
     for (const item of lowStockItems) {

@@ -9,6 +9,9 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, trim: true, lowercase: true },
   // Fleets this user is restricted to. Empty/undefined = unrestricted (sees every fleet).
   allowedFleets: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Fleet' }],
+  // Which branded side of the app this user sees (navbar/logo). Purely cosmetic —
+  // access control is still enforced by allowedFleets.
+  app: { type: String, enum: ['centrolider', 'minunes'], default: 'centrolider' },
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

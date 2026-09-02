@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { X, Paperclip } from "lucide-react";
 
 const OFICINAS = [
+  "Oficina Amparo",
+  "Oficina Aeroporto",
   "Autocrescente Ribeira Brava",
   "Autocrescente Canhas",
   "Maturifuel",

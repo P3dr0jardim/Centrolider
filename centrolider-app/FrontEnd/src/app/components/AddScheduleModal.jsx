@@ -12,6 +12,8 @@ const TIPOS = [
 ];
 
 const OFICINAS = [
+  "Oficina Amparo",
+  "Oficina Aeroporto",
   "Autocrescente Ribeira Brava",
   "Autocrescente Canhas",
   "Eurorepar",

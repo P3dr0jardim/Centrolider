@@ -2,6 +2,7 @@ import { Bell, Search, Settings, Menu, Truck, BarChart2, Package, Car, CalendarD
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { CentroliderLogo } from "./CentroliderLogo";
+import { MiNunesLogo } from "./MiNunesLogo";
 import { api } from "../../services/api";
 
 const STATUS_DOT = {
@@ -24,6 +25,7 @@ const SEVERITY_DOT = {
 
 export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSelect }) {
   const { user, logout } = useAuth();
+  const isMiNunes = user?.app === "minunes";
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Search state
@@ -158,7 +160,7 @@ export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSel
         <div className="flex justify-between h-16">
           <div className="flex items-center min-w-0 flex-1">
             <div className="flex-shrink-0 flex items-center">
-              <CentroliderLogo size="sm" />
+              {isMiNunes ? <MiNunesLogo size="sm" /> : <CentroliderLogo size="sm" />}
             </div>
 
             {/* Desktop Menu — scrolls horizontally instead of pushing the right-side controls off-screen */}
@@ -169,11 +171,11 @@ export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSel
                   onClick={() => onMenuChange(item.id)}
                   className={`inline-flex items-center flex-shrink-0 px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200 ${
                     activeMenu === item.id
-                      ? "border-blue-500 text-gray-900"
+                      ? isMiNunes ? "border-orange-600 text-gray-900" : "border-blue-500 text-gray-900"
                       : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
                   }`}
                 >
-                  <item.icon className={`w-4 h-4 mr-2 ${activeMenu === item.id ? "text-blue-500" : "text-gray-400"}`} />
+                  <item.icon className={`w-4 h-4 mr-2 ${activeMenu === item.id ? (isMiNunes ? "text-orange-600" : "text-blue-500") : "text-gray-400"}`} />
                   {item.label}
                 </button>
               ))}
@@ -375,13 +377,13 @@ export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSel
 
             <button
               onClick={onSettingsClick}
-              className={`p-2 rounded-lg transition-colors hidden md:block ${activeMenu === "configuracoes" ? "text-blue-600 bg-blue-50" : "text-gray-600 hover:bg-gray-100"}`}
+              className={`p-2 rounded-lg transition-colors hidden md:block ${activeMenu === "configuracoes" ? (isMiNunes ? "text-orange-600 bg-orange-50" : "text-blue-600 bg-blue-50") : "text-gray-600 hover:bg-gray-100"}`}
             >
               <Settings className="w-5 h-5" />
             </button>
 
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm ${isMiNunes ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>
                 {user?.name?.slice(0, 2).toUpperCase() || "?"}
               </div>
               <span className="hidden lg:block text-sm font-medium text-gray-700">{user?.name}</span>
@@ -420,11 +422,11 @@ export function Navbar({ activeMenu, onMenuChange, onSettingsClick, onVehicleSel
                 }}
                 className={`flex w-full items-center pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
                   activeMenu === item.id
-                    ? "bg-blue-50 border-blue-500 text-blue-700"
+                    ? isMiNunes ? "bg-orange-50 border-orange-600 text-orange-700" : "bg-blue-50 border-blue-500 text-blue-700"
                     : "border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
                 }`}
               >
-                <item.icon className={`w-5 h-5 mr-3 ${activeMenu === item.id ? "text-blue-500" : "text-gray-400"}`} />
+                <item.icon className={`w-5 h-5 mr-3 ${activeMenu === item.id ? (isMiNunes ? "text-orange-600" : "text-blue-500") : "text-gray-400"}`} />
                 {item.label}
               </button>
             ))}

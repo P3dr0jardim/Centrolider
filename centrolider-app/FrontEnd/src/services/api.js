@@ -79,6 +79,27 @@ export const api = {
   deleteStockItem: (id) => request('DELETE', `/stock/${id}`),
   consumeStock: (data) => request('POST', '/stock/consume', data),
 
+  // Stock attachments (multipart/form-data — caller passes a FormData object)
+  addStockAttachment: (stockItemId, formData) => {
+    const token = getToken();
+    return fetch(`${BASE}/stock/${stockItemId}/attachments`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    }).then(async (res) => {
+      if (res.status === 401) {
+        localStorage.removeItem('cl_token');
+        window.dispatchEvent(new Event('cl:logout'));
+        throw new Error('Sessão expirada.');
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || res.statusText);
+      return data;
+    });
+  },
+  deleteStockAttachment: (stockItemId, attachmentId) =>
+    request('DELETE', `/stock/${stockItemId}/attachments/${attachmentId}`),
+
   // Stats
   getStatsRentabilidade: () => request('GET', '/stats/rentabilidade'),
   syncVehicleStatuses: () => request('POST', '/stats/sync-status'),

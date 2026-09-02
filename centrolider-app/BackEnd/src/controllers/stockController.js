@@ -105,6 +105,94 @@ exports.remove = async (req, res) => {
   }
 };
 
+exports.addAttachment = async (req, res) => {
+  const fs = require('fs');
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const item = await StockItem.findById(req.params.id);
+    if (!item) {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      return res.status(404).json({ message: 'Stock item not found' });
+    }
+    if (!isStockAllowed(req.user, item.frotaIds)) {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    item.attachments.push({
+      originalName: req.file.originalname,
+      filename:     req.file.filename,
+      mimetype:     req.file.mimetype,
+      size:         req.file.size,
+      data:         new Date(),
+    });
+    await item.save();
+
+    logActivity({
+      user: req.user,
+      acao: 'Anexou',
+      entidade: 'Stock',
+      descricao: `Anexou ficheiro (fatura) ao item de stock: ${item.nome}`,
+      referencia: item.nome,
+      referenciaId: item._id,
+      frotaIds: item.frotaIds,
+    });
+
+    res.json(item);
+  } catch (err) {
+    try { fs.unlinkSync(req.file.path); } catch (_) {}
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.downloadAttachment = async (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    const item = await StockItem.findById(req.params.id);
+    if (!item) return res.status(404).json({ message: 'Stock item not found' });
+    if (!isStockAllowed(req.user, item.frotaIds)) return res.status(403).json({ message: 'Access denied' });
+
+    const att = item.attachments.id(req.params.attachmentId);
+    if (!att) return res.status(404).json({ message: 'Attachment not found' });
+
+    const diskPath = path.join(__dirname, '../../uploads', att.filename);
+    if (!fs.existsSync(diskPath)) {
+      return res.status(404).json({ message: 'File not found on disk. It may have been uploaded on a different server.' });
+    }
+
+    res.set({
+      'Content-Type':        att.mimetype || 'application/octet-stream',
+      'Content-Disposition': `inline; filename="${encodeURIComponent(att.originalName || att.filename)}"`,
+    });
+    res.sendFile(diskPath);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.deleteAttachment = async (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    const item = await StockItem.findById(req.params.id);
+    if (!item) return res.status(404).json({ message: 'Stock item not found' });
+    if (!isStockAllowed(req.user, item.frotaIds)) return res.status(403).json({ message: 'Access denied' });
+
+    const att = item.attachments.id(req.params.attachmentId);
+    if (!att) return res.status(404).json({ message: 'Attachment not found' });
+
+    if (att.filename) {
+      try { fs.unlinkSync(path.join(__dirname, '../../uploads', att.filename)); } catch (_) {}
+    }
+    att.deleteOne();
+    await item.save();
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // POST /api/stock/consume
 // Decrements stock for known items; creates new item for unknowns; records history for both.
 exports.consume = async (req, res) => {
